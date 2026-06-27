@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat Input Panel</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #1a2a2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .demo-hint {
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+      font-size: 18px;
+      user-select: none;
+    }
+    .demo-hint kbd {
+      display: inline-block;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 16px;
+      color: #fff;
+      margin: 0 2px;
+    }
+    .demo-hint .arrow {
+      display: block;
+      margin-top: 12px;
+      font-size: 28px;
+      color: var(--accent);
+      animation: bob 1.5s ease-in-out infinite;
+    }
+    @keyframes bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(6px); }
+    }
+    :root {
+      --bg: rgba(40, 52, 54, 0.85);
+      --text: #ffffff;
+      --placeholder: rgba(255, 255, 255, 0.5);
+      --accent: #4e8c6d;
+      --accent-hover: #5da37d;
+      --focus-ring: 2px solid #4e8c6d;
+    }
+
+    * { box-sizing: border-box; }
+
+    .chat-panel {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(90vw, 640px);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 1000;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .chat-panel.open {
+      display: flex;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font: 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 8px 4px;
+      min-width: 0;
+    }
+
+    .chat-input::placeholder {
+      color: var(--placeholder);
+    }
+
+    .chat-input:focus {
+      outline: none;
+    }
+
+    .chat-input:focus-visible {
+      outline: var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+    .chat-send {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font: 14px/1 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+
+    .chat-send:hover {
+      background: var(--accent-hover);
+      color: #fff;
+    }
+
+    .chat-send:focus-visible {
+      outline: var(--focus-ring);
+      outline-offset: 2px;
+    }
+
+    .chat-send:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-hint">
+    <div>Press <kbd>Enter</kbd> to open chat</div>
+    <div class="arrow">⌄</div>
+  </div>
+  <div class="chat-panel" id="chatPanel" role="dialog" aria-modal="true" aria-label="Chat">
+    <input
+      type="text"
+      class="chat-input"
+      id="chatInput"
+      placeholder="Type a message…"
+      maxlength="280"
+      aria-label="Chat message"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button class="chat-send" id="chatSend" type="button" aria-label="Send message">Send</button>
+    <div class="sr-only" id="chatStatus" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <script>
+    (function () {
+      const panel = document.getElementById('chatPanel');
+      const input = document.getElementById('chatInput');
+      const sendBtn = document.getElementById('chatSend');
+      const status = document.getElementById('chatStatus');
+
+      let isOpen = false;
+      let lastSent = 0;
+      const RATE_LIMIT_MS = 2000;
+      const MAX_LENGTH = 280;
+
+      function announce(msg) {
+        status.textContent = '';
+        requestAnimationFrame(() => { status.textContent = msg; });
+      }
+
+      function openPanel() {
+        if (isOpen) return;
+        isOpen = true;
+        panel.classList.add('open');
+        input.value = '';
+        input.focus();
+        announce('Chat opened');
+      }
+
+      function closePanel() {
+        if (!isOpen) return;
+        isOpen = false;
+        panel.classList.remove('open');
+        input.blur();
+        announce('Chat closed');
+      }
+
+      function sendMessage() {
+        const text = input.value.trim();
+        if (!text) return;
+        const now = Date.now();
+        if (now - lastSent < RATE_LIMIT_MS) return;
+        lastSent = now;
+
+        const event = new CustomEvent('chat:send', { detail: { message: text } });
+        document.dispatchEvent(event);
+
+        input.value = '';
+        closePanel();
+      }
+
+      function onKeyDown(e) {
+        if (e.key === 'Enter') {
+          if (!isOpen) {
+            e.preventDefault();
+            openPanel();
+          } else {
+            if (e.target === input) {
+              e.preventDefault();
+              sendMessage();
+            }
+          }
+        } else if (e.key === 'Escape' && isOpen) {
+          e.preventDefault();
+          closePanel();
+        }
+      }
+
+      function onSendClick() {
+        sendMessage();
+      }
+
+      function onInput() {
+        sendBtn.disabled = input.value.trim().length === 0;
+      }
+
+      document.addEventListener('keydown', onKeyDown);
+      sendBtn.addEventListener('click', onSendClick);
+      input.addEventListener('input', onInput);
+
+      window.ChatPanel = {
+        open: openPanel,
+        close: closePanel,
+        isOpen: () => isOpen
+      };
+    })();
+  </script>
+</body>
+</html>

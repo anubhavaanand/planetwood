@@ -16,3 +16,4 @@ public/scene.gltf
 *.blend
 # Large generated data - will be optimized later
 public/decoded_animations.json
+server/node_modules/
