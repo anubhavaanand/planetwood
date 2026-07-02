@@ -91,7 +91,7 @@ export class UISystem {
   addChatMessage(senderName, text) {
     const entry = document.createElement('div');
     entry.style.cssText = 'margin-bottom:4px;font-size:0.8rem;color:#9ab0b4;word-wrap:break-word;';
-    entry.innerHTML = `<strong style="color:#d9936a">${senderName}:</strong> ${this._escapeHtml(text)}`;
+    entry.innerHTML = `<strong style="color:#d9936a">${this._escapeHtml(senderName)}:</strong> ${this._escapeHtml(text)}`;
     this.logEl.appendChild(entry);
     this.logEl.scrollTop = this.logEl.scrollHeight;
     this.logEl.style.display = 'block';
