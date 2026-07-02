@@ -125,12 +125,12 @@ export class MultiplayerSystem {
         for (const name of animNames) {
           const entry = this.animSys.findAvatarAnim(this.animData, name);
           if (entry && avatar.skeleton) {
-            const { clip, mixer } = this.animSys.createSkinAnimation(entry, avatar.skeleton);
+            const { clip } = this.animSys.createSkinAnimation(entry, avatar.skeleton);
             let animName = name;
             if (name === 'afk1') animName = 'wave';
             if (name === 'afk2') animName = 'stretch';
             if (name === 'afk3') animName = 'look';
-            avatar.addAnimation(animName, clip, mixer);
+            avatar.addAnimation(animName, clip);
           }
         }
         avatar.playAnimation('idle');

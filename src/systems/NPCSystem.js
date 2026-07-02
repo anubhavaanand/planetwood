@@ -30,7 +30,7 @@ export class NPCSystem {
     const skinEntry = this.animationSystem.findSkinEntry(this.animData, data.npcType);
     if (!skinEntry) return npc;
 
-    const { bones, skeleton } = this.animationSystem.createSkin(skinEntry);
+    const { bones, skeleton } = this.animationSystem.createSkin(skinEntry, data.npcType);
 
     if (this.meshLoader) {
       const meshUrl = `/assets/npcs/${data.npcType}/${data.npcType}.drc`;
@@ -46,8 +46,8 @@ export class NPCSystem {
 
     const animEntry = this.animationSystem.findAnimEntry(this.animData, data.npcType, 'idle');
     if (animEntry && npc.skeleton) {
-      const { clip, mixer } = this.animationSystem.createSkinAnimation(animEntry, npc.skeleton);
-      npc.addAnimation('idle', clip, mixer);
+      const { clip } = this.animationSystem.createSkinAnimation(animEntry, npc.skeleton);
+      npc.addAnimation('idle', clip);
       npc.playAnimation('idle');
     }
 

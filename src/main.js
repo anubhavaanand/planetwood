@@ -9,7 +9,7 @@ import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
 
-const RELAY_URL = 'ws://localhost:3001';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3001';
 const FALLBACK_TIMEOUT = 5000;
 
 const loadingEl = document.getElementById('loading');
@@ -31,6 +31,7 @@ async function init() {
   try {
     updateLoading('Loading planet...', 10);
     const gltf = await sceneSys.loadScene('/scene.gltf');
+    sceneSys.optimizeStaticMeshes(gltf.scene);
     updateLoading('Planet loaded', 40);
 
     updateLoading('Loading animations...', 50);
@@ -69,12 +70,12 @@ async function init() {
     for (const name of animNames) {
       const entry = animSys.findAvatarAnim(animData, name);
       if (entry && playerAvatar.skeleton) {
-        const { clip, mixer } = animSys.createSkinAnimation(entry, playerAvatar.skeleton);
+        const { clip } = animSys.createSkinAnimation(entry, playerAvatar.skeleton);
         let animName = name;
         if (name === 'afk1') animName = 'wave';
         if (name === 'afk2') animName = 'stretch';
         if (name === 'afk3') animName = 'look';
-        playerAvatar.addAnimation(animName, clip, mixer);
+        playerAvatar.addAnimation(animName, clip);
       }
     }
     playerAvatar.playAnimation('idle');
@@ -254,6 +255,7 @@ function animate() {
   sceneSys.controls.target.lerp(playerAvatar?.group.position || new THREE.Vector3(0, 5, 0), 0.1);
   sceneSys.update();
   if (ui) ui.cullNameplates(sceneSys.camera);
+  sceneSys.updateFps(delta);
   sceneSys.render();
 }
 

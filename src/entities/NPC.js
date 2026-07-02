@@ -28,10 +28,12 @@ export class NPC {
     this.group.add(mesh);
   }
 
-  addAnimation(name, clip, mixer) {
-    this.mixer = mixer;
+  addAnimation(name, clip) {
+    if (!this.mixer && this.skeleton) {
+      this.mixer = new THREE.AnimationMixer(this.skeleton.bones[0]?.parent || this.skeleton.bones[0]);
+    }
     this.animationClips.push(name);
-    const action = mixer.clipAction(clip);
+    const action = this.mixer.clipAction(clip);
     this.actions[name] = action;
   }
 
