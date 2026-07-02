@@ -28,6 +28,9 @@ export class MultiplayerSystem {
     this.onNotification = null;
     this.onPlayerJoined = null;
     this.onPlayerLeft = null;
+    this.onAwayStateChanged = null;
+    this.onPlayerAwayChanged = null;
+    this.onEmote = null;
   }
 
   connect() {
@@ -47,11 +50,18 @@ export class MultiplayerSystem {
       this.connected = false;
       this._log('Connection closed');
       if (this.onNotification) this.onNotification('Multiplayer disconnected');
+      
+      // Auto-reconnect if not explicitly disconnected
+      if (this.ws) {
+        this._log(`Reconnecting in ${RECONNECT_DELAY}ms...`);
+        setTimeout(() => {
+          if (this.ws) this.connect();
+        }, RECONNECT_DELAY);
+      }
     };
 
     this.ws.onerror = () => {
       this._log('WebSocket error');
-      if (this.onNotification) this.onNotification('Multiplayer unavailable — exploring alone');
     };
   }
 
@@ -96,18 +106,47 @@ export class MultiplayerSystem {
       position: new THREE.Vector3().fromArray(data.position || [0, 2, 0]),
     });
 
+    // Generate unique color tint based on display name
+    let hash = 0;
+    const name = data.displayName || '';
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    const color = new THREE.Color().setHSL(hue / 360, 0.75, 0.55);
+
     const skinEntry = this.animSys.findAvatarBones(this.animData);
     if (skinEntry && !avatar.skeleton) {
       const { bones, skeleton } = this.animSys.createSkin(skinEntry);
-      const mat = new THREE.MeshStandardMaterial({ color: 0x88cc44, skinning: true, roughness: 0.6, metalness: 0.1 });
+      const mat = new THREE.MeshStandardMaterial({ color: color, skinning: true, roughness: 0.6, metalness: 0.1 });
+      
+      const setupAnimations = () => {
+        const animNames = ['idle', 'walk', 'run', 'afk1', 'afk2', 'afk3'];
+        for (const name of animNames) {
+          const entry = this.animSys.findAvatarAnim(this.animData, name);
+          if (entry && avatar.skeleton) {
+            const { clip } = this.animSys.createSkinAnimation(entry, avatar.skeleton);
+            let animName = name;
+            if (name === 'afk1') animName = 'wave';
+            if (name === 'afk2') animName = 'stretch';
+            if (name === 'afk3') animName = 'look';
+            avatar.addAnimation(animName, clip);
+          }
+        }
+        avatar.playAnimation('idle');
+      };
+
       if (this.meshLoader) {
         this.meshLoader.createSkinnedMesh('/assets/avatar/avatar-idle.drc', skeleton, mat).then(mesh => {
           avatar.setSkinnedMesh(mesh, skeleton);
+          setupAnimations();
         }).catch(() => {
-          this._fallbackRemoteMesh(avatar, skeleton);
+          this._fallbackRemoteMesh(avatar, skeleton, color);
+          setupAnimations();
         });
       } else {
-        this._fallbackRemoteMesh(avatar, skeleton);
+        this._fallbackRemoteMesh(avatar, skeleton, color);
+        setupAnimations();
       }
     }
 
@@ -117,9 +156,9 @@ export class MultiplayerSystem {
     if (this.onPlayerJoined) this.onPlayerJoined(data);
   }
 
-  _fallbackRemoteMesh(avatar, skeleton) {
+  _fallbackRemoteMesh(avatar, skeleton, color) {
     const geo = new THREE.BoxGeometry(0.8, 1.8, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x88cc44, skinning: true });
+    const mat = new THREE.MeshStandardMaterial({ color: color, skinning: true });
     const mesh = new THREE.SkinnedMesh(geo, mat, skeleton);
     mesh.bind(skeleton);
     avatar.setSkinnedMesh(mesh, skeleton);
@@ -127,10 +166,32 @@ export class MultiplayerSystem {
 
   _removeRemotePlayer(id) {
     const avatar = this.players.get(id);
-    if (!avatar) return;
-    this.scene.remove(avatar.group);
-    this.players.delete(id);
-    this._log(`Peer left: ${avatar.displayName}`);
+    if (avatar) {
+      this.scene.remove(avatar.group);
+      
+      // Clear timeout and dispose geometry/materials to prevent memory leaks
+      if (avatar.emoteTimeout) clearTimeout(avatar.emoteTimeout);
+      avatar.group.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+      this.players.delete(id);
+    }
+
+    if (this.pcs.has(id)) {
+      const pc = this.pcs.get(id);
+      pc.close();
+      this.pcs.delete(id);
+      this._log(`Closed PeerConnection with peer: ${id}`);
+    }
+
+    this._log(`Peer left: ${avatar ? avatar.displayName : id}`);
     if (this.onPlayerLeft) this.onPlayerLeft(id);
   }
 
@@ -193,7 +254,19 @@ export class MultiplayerSystem {
       case 'state': {
         avatar.group.position.fromArray(msg.position);
         if (msg.rotation) avatar.group.quaternion.fromArray(msg.rotation);
-        avatar.animationState = msg.animation || 'idle';
+        
+        const nextAnim = msg.animation || 'idle';
+        if (avatar.animationState !== nextAnim) {
+          avatar.playAnimation(nextAnim);
+        }
+
+        if (avatar.away !== msg.away) {
+          avatar.away = msg.away;
+          if (this.onPlayerAwayChanged) {
+            this.onPlayerAwayChanged(peerId, msg.away);
+          }
+        }
+        
         avatar.lastSeenAt = Date.now();
         break;
       }
@@ -228,8 +301,19 @@ export class MultiplayerSystem {
             position: Array.from(this.localPosition),
             rotation: Array.from(this.localRotation),
             animation: this.localAnimation,
+            away: this.away,
           }));
         }
+      }
+
+      // Periodically sync position to WebSocket relay server so new peers receive correct initial positions
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'state',
+          payload: {
+            position: Array.from(this.localPosition)
+          }
+        }));
       }
     }, SYNC_INTERVAL);
   }
@@ -237,13 +321,25 @@ export class MultiplayerSystem {
   _setupAwayDetection() {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        this.away = true;
-        this.localAnimation = 'idle';
-        this._broadcastState();
-        this._log('Away');
+        this.awayTimer = setTimeout(() => {
+          this.away = true;
+          this.localAnimation = 'afk1';
+          this._broadcastState();
+          this._log('Away');
+          if (this.onAwayStateChanged) this.onAwayStateChanged(true);
+        }, AWAY_TIMEOUT);
       } else {
-        this.away = false;
-        this._log('Back');
+        if (this.awayTimer) {
+          clearTimeout(this.awayTimer);
+          this.awayTimer = null;
+        }
+        if (this.away) {
+          this.away = false;
+          this.localAnimation = 'idle';
+          this._broadcastState();
+          this._log('Back');
+          if (this.onAwayStateChanged) this.onAwayStateChanged(false);
+        }
       }
     });
   }
@@ -258,6 +354,7 @@ export class MultiplayerSystem {
           position: Array.from(this.localPosition),
           rotation: Array.from(this.localRotation),
           animation: this.localAnimation,
+          away: this.away,
         }));
       }
     }
@@ -304,10 +401,24 @@ export class MultiplayerSystem {
 
   disconnect() {
     if (this.syncInterval) clearInterval(this.syncInterval);
-    if (this.ws) this.ws.close();
+    const wsToClose = this.ws;
+    this.ws = null;
+    if (wsToClose) wsToClose.close();
     for (const pc of this.pcs.values()) pc.close();
     this.pcs.clear();
-    for (const avatar of this.players.values()) this.scene.remove(avatar.group);
+    for (const avatar of this.players.values()) {
+      this.scene.remove(avatar.group);
+      avatar.group.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+    }
     this.players.clear();
     this.connected = false;
   }

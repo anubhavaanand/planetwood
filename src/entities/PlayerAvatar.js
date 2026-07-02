@@ -28,9 +28,11 @@ export class PlayerAvatar {
     this.group.add(mesh);
   }
 
-  addAnimation(name, clip, mixer) {
-    this.mixer = mixer;
-    const action = mixer.clipAction(clip);
+  addAnimation(name, clip) {
+    if (!this.mixer && this.skeleton) {
+      this.mixer = new THREE.AnimationMixer(this.skeleton.bones[0]?.parent || this.skeleton.bones[0]);
+    }
+    const action = this.mixer.clipAction(clip);
     this.actions[name] = action;
   }
 
