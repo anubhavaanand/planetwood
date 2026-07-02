@@ -107,6 +107,7 @@ wss.on('connection', (ws) => {
     payload: {
       sessionId: 'planetwood-001',
       assignedId: player.id,
+      displayName: player.displayName,
       peers: session.getPeers(player.id),
     },
   }));

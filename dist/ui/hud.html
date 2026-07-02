@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood HUD</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: rgba(40, 52, 54, 0.85);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --border-radius: 8px;
+    }
+
+    .hud-container {
+      position: fixed;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 1rem;
+      z-index: 150;
+      pointer-events: none; /* So clicks go through to the game */
+    }
+
+    .hud-pill {
+      background: var(--dark-bg);
+      color: var(--white-text);
+      padding: 0.25rem 0.5rem;
+      border-radius: var(--border-radius);
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-family: var(--font-family);
+      font-size: 0.875rem; /* 14px */
+    }
+
+    .hud-pill .icon {
+      font-size: 1rem; /* Slightly larger for emojis */
+    }
+
+    .hud-pill .value {
+      font-variant-numeric: tabular-nums; /* For consistent width of numbers */
+    }
+
+    .hud-pill .connection-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* Reduced motion: disable transitions */
+    @media (prefers-reduced-motion: reduce) {
+      .hud-pill,
+      .hud-pill .value,
+      .hud-pill .connection-indicator {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="hud-container" role="status" aria-live="polite">
+    <div class="hud-pill" id="player-count-pill">
+      <span class="icon">👥</span>
+      <span class="value" aria-hidden="true">0</span>
+    </div>
+    <div class="hud-pill" id="fps-pill">
+      <span class="icon">🎯</span>
+      <span class="value" aria-hidden="true">0</span>
+    </div>
+    <div class="hud-pill" id="connection-pill">
+      <span class="icon">📶</span>
+      <span class="connection-indicator" id="connection-indicator" aria-label="Connection quality: good"></span>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      // HUD object
+      window.HUD = {
+        _lastTime: 0,
+        _rafId: null,
+        _externalFPSSet: false,
+        _externalFPS: 0,
+
+        /**
+         * Initialize the HUD - creates DOM elements and starts the FPS update loop
+         */
+        init: function() {
+          // Cache DOM elements
+          this.playerCountElement = document.getElementById('player-count-pill').querySelector('.value');
+          this.fpsElement = document.getElementById('fps-pill').querySelector('.value');
+          this.connectionIndicator = document.getElementById('connection-indicator');
+          this.container = document.querySelector('.hud-container');
+
+          // Start FPS update loop
+          this._startFPSTracker();
+        },
+
+        /**
+         * Set the player count display
+         * @param {number} n - Number of players
+         */
+        setPlayerCount: function(n) {
+          this.playerCountElement.textContent = n;
+          this.container.setAttribute('aria-label', `Player count: ${n}, FPS: ${this._externalFPS || 0}, Connection: ${this._getConnectionQualityText()}`);
+        },
+
+        /**
+         * Set the FPS display
+         * @param {number} n - Frames per second
+         */
+        setFPS: function(n) {
+          this._externalFPSSet = true;
+          this._externalFPS = n;
+          this.fpsElement.textContent = Math.round(n);
+          this.container.setAttribute('aria-label', `Player count: ${this.playerCountElement.textContent}, FPS: ${Math.round(n)}, Connection: ${this._getConnectionQualityText()}`);
+        },
+
+        /**
+         * Set the connection quality indicator
+         * @param {"good"|"fair"|"poor"} quality - Connection quality level
+         */
+        setConnectionQuality: function(quality) {
+          // Remove all quality classes first
+          this.connectionIndicator.classList.remove('connection-good', 'connection-fair', 'connection-poor');
+          
+          // Add the appropriate class
+          this.connectionIndicator.classList.add(`connection-${quality}`);
+          
+          // Set color based on quality
+          switch(quality) {
+            case 'good':
+              this.connectionIndicator.style.backgroundColor = 'var(--primary-green)';
+              break;
+            case 'fair':
+              this.connectionIndicator.style.backgroundColor = '#f39c12'; // amber
+              break;
+            case 'poor':
+              this.connectionIndicator.style.backgroundColor = '#c0392b'; // red
+              break;
+          }
+          
+          this.container.setAttribute('aria-label', `Player count: ${this.playerCountElement.textContent}, FPS: ${this._externalFPS || 0}, Connection: ${this._getConnectionQualityText()}`);
+        },
+
+        /**
+         * Get the connection quality text for aria-label
+         * @returns {string} 
+         * @private
+         */
+        _getConnectionQualityText: function() {
+          const classes = this.connectionIndicator.classList;
+          if (classes.contains('connection-good')) return 'good';
+          if (classes.contains('connection-fair')) return 'fair';
+          if (classes.contains('connection-poor')) return 'poor';
+          return 'unknown';
+        },
+
+        /**
+         * Start the FPS tracker using requestAnimationFrame
+         * @private
+         */
+        _startFPSTracker: function() {
+          const updateFPS = (timestamp) => {
+            if (!this._externalFPSSet) {
+              // Calculate FPS based on time delta
+              if (this._lastTime !== 0) {
+                const delta = timestamp - this._lastTime;
+                const fps = 1000 / delta;
+                this.setFPS(fps);
+              }
+              this._lastTime = timestamp;
+            }
+            this._rafId = requestAnimationFrame(updateFPS);
+          };
+          
+          this._rafId = requestAnimationFrame(updateFPS);
+        },
+
+        /**
+         * Stop the FPS tracker (cleanup)
+         */
+        destroy: function() {
+          if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+          }
+        }
+      };
+
+      // Initialize HUD when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => HUD.init());
+      } else {
+        HUD.init();
+      }
+    })();
+  </script>
+</body>
+</html>

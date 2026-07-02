@@ -75,6 +75,8 @@ async function init() {
     chatSys = new ChatSystem();
     ui = new UISystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
 
+    ui.addNameplate(playerAvatar, 'You', true);
+
     ui.onSendChat = (text) => {
       chatSys.addMessage({
         senderId: 'local', senderName: 'You', text,
@@ -95,7 +97,10 @@ async function init() {
 
     updateLoading('Placing NPCs...', 95);
     npcSys = new NPCSystem(sceneSys.scene, animSys, animData, meshLoader);
-    await npcSys.loadFromScene(gltf.scene);
+    const npcs = await npcSys.loadFromScene(gltf.scene);
+    for (const npc of npcs) {
+      ui.addNameplate(npc, npc.displayName);
+    }
 
     updateLoading('Connecting...', 98);
     _setupMultiplayer(animData);
@@ -119,9 +124,17 @@ function _setupMultiplayer(animData) {
     const avatar = multiplayer.players.get(msg.senderId);
     if (avatar) ui.showChatBubble(avatar, msg.text);
   };
+  multiplayer.onPlayerJoined = (data) => {
+    const avatar = multiplayer.players.get(data.id);
+    if (avatar && ui) ui.addNameplate(avatar, data.displayName);
+  };
+  multiplayer.onPlayerLeft = (id) => {
+    if (ui) ui.removeNameplate({ id });
+  };
 
   fallbackTimer = setTimeout(() => {
-    if (!multiplayer.connected && ui) {
+    if (multiplayer && !multiplayer.connected && ui) {
+      multiplayer.disconnect();
       multiplayer = null;
       ui.addNotification('Multiplayer unavailable — exploring alone');
     }

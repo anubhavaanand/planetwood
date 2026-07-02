@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 export class UISystem {
   constructor(scene, camera, renderer) {
@@ -6,6 +7,7 @@ export class UISystem {
     this.camera = camera;
     this.renderer = renderer;
     this.bubbles = new Map();
+    this.nameplates = new Map();
     this.onSendChat = null;
     this._setupChatInput();
     this._setupChatLog();
@@ -133,8 +135,57 @@ export class UISystem {
     return div.innerHTML;
   }
 
+  addNameplate(entity, text, isLocalPlayer = false) {
+    const existing = this.nameplates.get(entity.id);
+    if (existing) this.removeNameplate(entity);
+
+    const div = document.createElement('div');
+    div.className = 'nameplate';
+    div.textContent = isLocalPlayer ? `${text} (You)` : text;
+    div.style.cssText = `
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(30, 40, 42, 0.85);
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(217, 147, 106, 0.3);
+      transform: translateY(-1.5em);
+      text-align: center;
+    `;
+
+    const label = new CSS2DObject(div);
+    label.position.set(0, 2.4, 0);
+    entity.group.add(label);
+    this.nameplates.set(entity.id, { label, div });
+    return label;
+  }
+
+  removeNameplate(entity) {
+    const entry = this.nameplates.get(entity.id);
+    if (!entry) return;
+    entity.group.remove(entry.label);
+    entry.div.remove();
+    this.nameplates.delete(entity.id);
+  }
+
+  updateNameplatePosition(entity) {
+    const entry = this.nameplates.get(entity.id);
+    if (!entry) return;
+    entry.label.position.set(0, 2.4, 0);
+  }
+
   dispose() {
     if (this.inputEl?.parentNode) this.inputEl.parentNode.removeChild(this.inputEl);
     if (this.logEl?.parentNode) this.logEl.parentNode.removeChild(this.logEl);
+    for (const [id, entry] of this.nameplates) {
+      if (entry.div?.parentNode) entry.div.parentNode.removeChild(entry.div);
+    }
+    this.nameplates.clear();
   }
 }
