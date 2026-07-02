@@ -50,11 +50,18 @@ export class MultiplayerSystem {
       this.connected = false;
       this._log('Connection closed');
       if (this.onNotification) this.onNotification('Multiplayer disconnected');
+      
+      // Auto-reconnect if not explicitly disconnected
+      if (this.ws) {
+        this._log(`Reconnecting in ${RECONNECT_DELAY}ms...`);
+        setTimeout(() => {
+          if (this.ws) this.connect();
+        }, RECONNECT_DELAY);
+      }
     };
 
     this.ws.onerror = () => {
       this._log('WebSocket error');
-      if (this.onNotification) this.onNotification('Multiplayer unavailable — exploring alone');
     };
   }
 
@@ -159,24 +166,32 @@ export class MultiplayerSystem {
 
   _removeRemotePlayer(id) {
     const avatar = this.players.get(id);
-    if (!avatar) return;
-    this.scene.remove(avatar.group);
-    
-    // Clear timeout and dispose geometry/materials to prevent memory leaks
-    if (avatar.emoteTimeout) clearTimeout(avatar.emoteTimeout);
-    avatar.group.traverse((child) => {
-      if (child.isMesh) {
-        child.geometry.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material.dispose();
+    if (avatar) {
+      this.scene.remove(avatar.group);
+      
+      // Clear timeout and dispose geometry/materials to prevent memory leaks
+      if (avatar.emoteTimeout) clearTimeout(avatar.emoteTimeout);
+      avatar.group.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
         }
-      }
-    });
+      });
+      this.players.delete(id);
+    }
 
-    this.players.delete(id);
-    this._log(`Peer left: ${avatar.displayName}`);
+    if (this.pcs.has(id)) {
+      const pc = this.pcs.get(id);
+      pc.close();
+      this.pcs.delete(id);
+      this._log(`Closed PeerConnection with peer: ${id}`);
+    }
+
+    this._log(`Peer left: ${avatar ? avatar.displayName : id}`);
     if (this.onPlayerLeft) this.onPlayerLeft(id);
   }
 
@@ -290,6 +305,16 @@ export class MultiplayerSystem {
           }));
         }
       }
+
+      // Periodically sync position to WebSocket relay server so new peers receive correct initial positions
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'state',
+          payload: {
+            position: Array.from(this.localPosition)
+          }
+        }));
+      }
     }, SYNC_INTERVAL);
   }
 
@@ -376,10 +401,24 @@ export class MultiplayerSystem {
 
   disconnect() {
     if (this.syncInterval) clearInterval(this.syncInterval);
-    if (this.ws) this.ws.close();
+    const wsToClose = this.ws;
+    this.ws = null;
+    if (wsToClose) wsToClose.close();
     for (const pc of this.pcs.values()) pc.close();
     this.pcs.clear();
-    for (const avatar of this.players.values()) this.scene.remove(avatar.group);
+    for (const avatar of this.players.values()) {
+      this.scene.remove(avatar.group);
+      avatar.group.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      });
+    }
     this.players.clear();
     this.connected = false;
   }

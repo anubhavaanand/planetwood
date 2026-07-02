@@ -38,7 +38,17 @@ async function init() {
     updateLoading('Animations loaded', 70);
 
     updateLoading('Creating player...', 80);
-    playerAvatar = new PlayerAvatar({ id: 'local', displayName: 'You', position: new THREE.Vector3(0, 2, 0) });
+    let startPos = new THREE.Vector3(0, 2, 0);
+    try {
+      const saved = localStorage.getItem('planetwood_last_pos');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        startPos.set(parsed.x, parsed.y, parsed.z);
+      }
+    } catch (e) {
+      console.warn('Failed to load last position', e);
+    }
+    playerAvatar = new PlayerAvatar({ id: 'local', displayName: 'You', position: startPos });
 
     const avatarBones = animSys.findAvatarBones(animData);
     if (avatarBones) {
@@ -101,7 +111,7 @@ async function init() {
         senderId: 'local', senderName: 'You', text,
         timestamp: Date.now(), senderPosition: playerAvatar.group.position.clone(),
       });
-      ui.addChatMessage('You', text);
+      ui.addChatMessage('You', text, 'local');
       if (multiplayer?.connected) {
         multiplayer.sendChat(text);
       }
@@ -142,7 +152,7 @@ function _setupMultiplayer(animData) {
     if (!avatar) return;
     if (chatSys.isInRange(playerAvatar.group.position, avatar.group.position)) {
       chatSys.addMessage(msg);
-      ui.addChatMessage(msg.senderName, msg.text);
+      ui.addChatMessage(msg.senderName, msg.text, msg.senderId);
       ui.showChatBubble(avatar, msg.text);
     }
   };
@@ -211,6 +221,14 @@ function animate() {
         const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
         playerAvatar.group.quaternion.slerp(quat, 0.1);
         playerAvatar.playAnimation('walk');
+
+        try {
+          localStorage.setItem('planetwood_last_pos', JSON.stringify({
+            x: playerAvatar.group.position.x,
+            y: playerAvatar.group.position.y,
+            z: playerAvatar.group.position.z
+          }));
+        } catch (e) {}
       } else {
         if (playerAvatar.animationState !== 'wave' &&
             playerAvatar.animationState !== 'stretch' &&

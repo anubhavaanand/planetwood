@@ -10,6 +10,7 @@ export class UISystem {
     this.nameplates = new Map();
     this.onSendChat = null;
     this.onTriggerEmote = null;
+    this.blockedPlayers = new Set();
     this._setupChatInput();
     this._setupChatLog();
     this._setupEmotePanel();
@@ -90,10 +91,36 @@ export class UISystem {
     return this.inputContainer.style.display !== 'none';
   }
 
-  addChatMessage(senderName, text) {
+  addChatMessage(senderName, text, senderId = 'local') {
+    if (this.blockedPlayers.has(senderId)) return;
+
     const entry = document.createElement('div');
-    entry.style.cssText = 'margin-bottom:4px;font-size:0.8rem;color:#9ab0b4;word-wrap:break-word;';
-    entry.innerHTML = `<strong style="color:#d9936a">${senderName}:</strong> ${this._escapeHtml(text)}`;
+    entry.className = 'chat-entry';
+    entry.dataset.senderId = senderId;
+    entry.style.cssText = 'margin-bottom:4px;font-size:0.8rem;color:#9ab0b4;word-wrap:break-word;display:flex;justify-content:space-between;align-items:center;';
+    
+    const textSpan = document.createElement('span');
+    textSpan.innerHTML = `<strong style="color:#d9936a">${senderName}:</strong> ${this._escapeHtml(text)}`;
+    entry.appendChild(textSpan);
+
+    if (senderId !== 'local') {
+      const blockBtn = document.createElement('button');
+      blockBtn.textContent = 'Block';
+      Object.assign(blockBtn.style, {
+        background: 'transparent', border: 'none', color: '#ff6b6b',
+        fontSize: '0.65rem', cursor: 'pointer', padding: '0 4px',
+        fontFamily: 'system-ui, sans-serif'
+      });
+      blockBtn.addEventListener('click', () => {
+        this.blockedPlayers.add(senderId);
+        // Remove all entries by this sender from the log
+        const entries = this.logEl.querySelectorAll(`.chat-entry[data-sender-id="${senderId}"]`);
+        entries.forEach(el => el.remove());
+        this.addNotification(`Blocked player: ${senderName}`);
+      });
+      entry.appendChild(blockBtn);
+    }
+
     this.logEl.appendChild(entry);
     this.logEl.scrollTop = this.logEl.scrollHeight;
     this.logEl.style.display = 'block';
@@ -103,6 +130,8 @@ export class UISystem {
   }
 
   showChatBubble(avatar, text, duration = 5000) {
+    if (this.blockedPlayers.has(avatar.id)) return;
+
     if (this.bubbles.has(avatar.id)) {
       const old = this.bubbles.get(avatar.id);
       avatar.group.remove(old.sprite);

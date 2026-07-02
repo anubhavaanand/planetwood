@@ -109,6 +109,19 @@
 
 ---
 
+## Phase 7: Convergence
+
+**Purpose**: Close gaps between spec requirements and current implementation identified by `/speckit.converge`
+
+- [ ] T028 Add 5-second load timeout enforcement with fallback handling per FR-001, US1/AC1 (partial)
+- [ ] T029 Reduce DISCONNECT_TIMEOUT from 10000 to 3000 per FR-008, US2/AC2 (contradicts)
+- [ ] T030 Implement rejoin identity tracking with last-known position restoration per FR-008 edge case (missing)
+- [ ] T031 Add deliberate tab order and focus management for dynamic UI elements per FR-009 (partial)
+- [ ] T032 Wire sr-announce aria-live region for player join/leave events per FR-010, SC-005 (partial)
+- [ ] T033 Performance optimization pass — InstancedMesh for repeated objects, skeleton pooling, texture compression, FPS monitoring per FR-012, SC-006, Constitution III (missing)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
