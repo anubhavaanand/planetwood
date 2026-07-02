@@ -55,18 +55,19 @@ async function init() {
       }
     }
 
-    const avatarIdle = animSys.findAvatarAnim(animData, 'idle');
-    if (avatarIdle && playerAvatar.skeleton) {
-      const { clip, mixer } = animSys.createSkinAnimation(avatarIdle, playerAvatar.skeleton);
-      playerAvatar.addAnimation('idle', clip, mixer);
-      playerAvatar.playAnimation('idle');
+    const animNames = ['idle', 'walk', 'run', 'afk1', 'afk2', 'afk3'];
+    for (const name of animNames) {
+      const entry = animSys.findAvatarAnim(animData, name);
+      if (entry && playerAvatar.skeleton) {
+        const { clip, mixer } = animSys.createSkinAnimation(entry, playerAvatar.skeleton);
+        let animName = name;
+        if (name === 'afk1') animName = 'wave';
+        if (name === 'afk2') animName = 'stretch';
+        if (name === 'afk3') animName = 'look';
+        playerAvatar.addAnimation(animName, clip, mixer);
+      }
     }
-
-    const avatarWalk = animSys.findAvatarAnim(animData, 'walk');
-    if (avatarWalk && playerAvatar.skeleton) {
-      const { clip, mixer } = animSys.createSkinAnimation(avatarWalk, playerAvatar.skeleton);
-      playerAvatar.addAnimation('walk', clip, mixer);
-    }
+    playerAvatar.playAnimation('idle');
 
     sceneSys.scene.add(playerAvatar.group);
     updateLoading('Setting up controls...', 90);
@@ -77,7 +78,25 @@ async function init() {
 
     ui.addNameplate(playerAvatar, 'You', true);
 
+    let emoteTimeout = null;
+    function triggerLocalEmote(type) {
+      if (!playerAvatar) return;
+      playerAvatar.playAnimation(type);
+      if (multiplayer?.connected) {
+        multiplayer.sendEmote(type);
+      }
+      if (emoteTimeout) clearTimeout(emoteTimeout);
+      emoteTimeout = setTimeout(() => {
+        if (playerAvatar.animationState === type) {
+          playerAvatar.playAnimation('idle');
+        }
+      }, 4000);
+    }
+
+    ui.onTriggerEmote = triggerLocalEmote;
+
     ui.onSendChat = (text) => {
+      if (!chatSys.canSend()) return;
       chatSys.addMessage({
         senderId: 'local', senderName: 'You', text,
         timestamp: Date.now(), senderPosition: playerAvatar.group.position.clone(),
@@ -119,10 +138,13 @@ function _setupMultiplayer(animData) {
   multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
   multiplayer.onNotification = (msg) => ui?.addNotification(msg);
   multiplayer.onChatMessage = (msg) => {
-    chatSys.addMessage(msg);
-    ui.addChatMessage(msg.senderName, msg.text);
     const avatar = multiplayer.players.get(msg.senderId);
-    if (avatar) ui.showChatBubble(avatar, msg.text);
+    if (!avatar) return;
+    if (chatSys.isInRange(playerAvatar.group.position, avatar.group.position)) {
+      chatSys.addMessage(msg);
+      ui.addChatMessage(msg.senderName, msg.text);
+      ui.showChatBubble(avatar, msg.text);
+    }
   };
   multiplayer.onPlayerJoined = (data) => {
     const avatar = multiplayer.players.get(data.id);
@@ -130,6 +152,34 @@ function _setupMultiplayer(animData) {
   };
   multiplayer.onPlayerLeft = (id) => {
     if (ui) ui.removeNameplate({ id });
+  };
+  multiplayer.onEmote = (peerId, type) => {
+    const avatar = multiplayer.players.get(peerId);
+    if (!avatar) return;
+    if (chatSys.isInRange(playerAvatar.group.position, avatar.group.position)) {
+      avatar.playAnimation(type);
+      if (avatar.emoteTimeout) clearTimeout(avatar.emoteTimeout);
+      avatar.emoteTimeout = setTimeout(() => {
+        if (avatar.animationState === type) {
+          avatar.playAnimation('idle');
+        }
+      }, 4000);
+    }
+  };
+  multiplayer.onAwayStateChanged = (isAway) => {
+    if (isAway) {
+      ui.addNameplate(playerAvatar, 'You', true);
+      ui.addNameplate(playerAvatar, 'You [Away]', true);
+    } else {
+      ui.addNameplate(playerAvatar, 'You', true);
+    }
+  };
+  multiplayer.onPlayerAwayChanged = (peerId, isAway) => {
+    const avatar = multiplayer.players.get(peerId);
+    if (avatar) {
+      const baseName = avatar.displayName;
+      ui.addNameplate(avatar, isAway ? `${baseName} [Away]` : baseName);
+    }
   };
 
   fallbackTimer = setTimeout(() => {
@@ -162,7 +212,11 @@ function animate() {
         playerAvatar.group.quaternion.slerp(quat, 0.1);
         playerAvatar.playAnimation('walk');
       } else {
-        playerAvatar.playAnimation('idle');
+        if (playerAvatar.animationState !== 'wave' &&
+            playerAvatar.animationState !== 'stretch' &&
+            playerAvatar.animationState !== 'look') {
+          playerAvatar.playAnimation('idle');
+        }
       }
     }
   }
@@ -181,6 +235,7 @@ function animate() {
 
   sceneSys.controls.target.lerp(playerAvatar?.group.position || new THREE.Vector3(0, 5, 0), 0.1);
   sceneSys.update();
+  if (ui) ui.cullNameplates(sceneSys.camera);
   sceneSys.render();
 }
 

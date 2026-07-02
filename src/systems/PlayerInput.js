@@ -7,14 +7,33 @@ export class PlayerInput {
     this.moveDirection = new THREE.Vector3();
     this.movement = new THREE.Vector3();
 
-    this._onKeyDown = (e) => { this.keys[e.code] = true; };
-    this._onKeyUp = (e) => { this.keys[e.code] = false; };
+    this._onKeyDown = (e) => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        return;
+      }
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        e.preventDefault();
+      }
+      this.keys[e.code] = true;
+    };
+    this._onKeyUp = (e) => {
+      this.keys[e.code] = false;
+    };
 
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);
   }
 
   update(delta) {
+    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+      this.keys = {};
+      this.movement.set(0, 0, 0);
+      return {
+        movement: this.movement,
+        keys: this.keys,
+      };
+    }
+
     const dir = this.moveDirection.set(0, 0, 0);
     const forward = new THREE.Vector3();
     this.camera.getWorldDirection(forward);
