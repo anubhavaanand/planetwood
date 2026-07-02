@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetwood Nameplate Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #283436;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: #ffffff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Subtle grid to suggest 3D ground */
+        .ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: 
+                linear-gradient(to right, rgba(40, 52, 54, 0.3) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(40, 52, 54, 0.3) 1px, transparent 1px);
+            background-size: 20px 20px;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        /* Nameplate container */
+        .nameplate {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            background: rgba(60, 72, 74, 0.7);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            position: absolute;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        /* Status dot */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(78, 140, 109, 0.7);
+        }
+
+        .status-dot.online {
+            background-color: #4e8c6d;
+        }
+
+        .status-dot.away {
+            background-color: #f39c12;
+        }
+
+        .status-dot.offline {
+            background-color: #c0392b;
+        }
+
+        /* Player name */
+        .player-name {
+            font-size: 13px;
+            font-weight: 400;
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        /* You badge */
+        .you-badge {
+            background-color: #4e8c6d;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Position the nameplates */
+        #nameplate-center {
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #nameplate-upper-left {
+            left: 20%;
+            top: 30%;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+
+        #nameplate-lower-right {
+            left: 80%;
+            top: 70%;
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+
+        /* Tagline */
+        .tagline {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.4;
+        }
+
+        /* Prevent text selection */
+        .nameplate, .tagline {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="ground"></div>
+    
+    <!-- Center nameplate: BraveFox (You) -->
+    <div class="nameplate" id="nameplate-center">
+        <div class="status-dot online"></div>
+        <div class="player-name">BraveFox</div>
+        <div class="you-badge">You</div>
+    </div>
+    
+    <!-- Upper left nameplate: MightyWhale -->
+    <div class="nameplate" id="nameplate-upper-left">
+        <div class="status-dot online"></div>
+        <div class="player-name">MightyWhale</div>
+    </div>
+    
+    <!-- Lower right nameplate: ShyPanda -->
+    <div class="nameplate" id="nameplate-lower-right">
+        <div class="status-dot away"></div>
+        <div class="player-name">ShyPanda</div>
+    </div>
+    
+    <div class="tagline">
+        Player nameplate concept — implemented with Three.js CSS2DRenderer
+    </div>
+</body>
+</html>
