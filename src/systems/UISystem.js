@@ -12,20 +12,37 @@ export class UISystem {
   }
 
   _setupChatInput() {
+    this.inputContainer = document.createElement('div');
+    this.inputContainer.id = 'chat-input-container';
+    Object.assign(this.inputContainer.style, {
+      position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+      width: '320px', zIndex: '300', display: 'none',
+      flexDirection: 'column', gap: '4px'
+    });
+
     this.inputEl = document.createElement('input');
     this.inputEl.id = 'chat-input';
     this.inputEl.type = 'text';
     this.inputEl.maxLength = 200;
     this.inputEl.placeholder = 'Type a message...';
     Object.assign(this.inputEl.style, {
-      position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
-      width: '320px', padding: '10px 14px', borderRadius: '8px', border: 'none',
+      width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none',
       background: '#3c484a', color: '#e8dccc', fontSize: '0.95rem',
-      outline: '2px solid transparent', zIndex: '300',
-      display: 'none',
+      boxSizing: 'border-box'
     });
     this.inputEl.setAttribute('aria-label', 'Chat input');
-    document.body.appendChild(this.inputEl);
+    this.inputEl.setAttribute('aria-describedby', 'chat-input-hint');
+
+    this.inputHint = document.createElement('div');
+    this.inputHint.id = 'chat-input-hint';
+    this.inputHint.textContent = 'Press Enter to send, Esc to cancel';
+    Object.assign(this.inputHint.style, {
+      fontSize: '0.75rem', color: '#9ab0b4', textAlign: 'center'
+    });
+
+    this.inputContainer.appendChild(this.inputEl);
+    this.inputContainer.appendChild(this.inputHint);
+    document.body.appendChild(this.inputContainer);
 
     this.inputEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && this.inputEl.value.trim()) {
@@ -56,17 +73,17 @@ export class UISystem {
   }
 
   showInput() {
-    this.inputEl.style.display = 'block';
+    this.inputContainer.style.display = 'flex';
     this.inputEl.focus();
   }
 
   hideInput() {
-    this.inputEl.style.display = 'none';
+    this.inputContainer.style.display = 'none';
     this.inputEl.blur();
   }
 
   get isInputOpen() {
-    return this.inputEl.style.display !== 'none';
+    return this.inputContainer.style.display !== 'none';
   }
 
   addChatMessage(senderName, text) {
@@ -134,7 +151,7 @@ export class UISystem {
   }
 
   dispose() {
-    if (this.inputEl?.parentNode) this.inputEl.parentNode.removeChild(this.inputEl);
+    if (this.inputContainer?.parentNode) this.inputContainer.parentNode.removeChild(this.inputContainer);
     if (this.logEl?.parentNode) this.logEl.parentNode.removeChild(this.logEl);
   }
 }

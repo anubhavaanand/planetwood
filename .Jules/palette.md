@@ -1,0 +1,3 @@
+## 2025-02-23 - Focus Rings and Hidden Input UX
+**Learning:** Setting `outline: transparent` on inputs to achieve a cleaner look removes crucial accessibility cues for keyboard users, making it hard to know when a hidden/toggleable input is active. Additionally, when an input is revealed via a keyboard shortcut (like Enter), users may not inherently know how to submit or cancel without helper text.
+**Action:** Removed transparent outline to allow global `:focus-visible` styles to apply. Added `aria-describedby` helper text explaining that Enter submits and Esc cancels, improving both visual focus cues and operational clarity.
