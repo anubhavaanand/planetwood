@@ -8,6 +8,7 @@ import { MultiplayerSystem } from './systems/MultiplayerSystem.js';
 import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 const RELAY_URL = 'ws://localhost:3001';
 const FALLBACK_TIMEOUT = 5000;
@@ -26,6 +27,7 @@ let multiplayer = null;
 let chatSys = null;
 let ui = null;
 let fallbackTimer = null;
+let billboard = null;
 
 async function init() {
   try {
@@ -74,6 +76,7 @@ async function init() {
     input = new PlayerInput(sceneSys.camera);
     chatSys = new ChatSystem();
     ui = new UISystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
+    ui.createNameplate(playerAvatar);
 
     ui.onSendChat = (text) => {
       chatSys.addMessage({
@@ -96,6 +99,9 @@ async function init() {
     updateLoading('Placing NPCs...', 95);
     npcSys = new NPCSystem(sceneSys.scene, animSys, animData, meshLoader);
     await npcSys.loadFromScene(gltf.scene);
+    npcSys.npcs.forEach(npc => ui.createNameplate(npc));
+
+    _setupWebCityExpansion();
 
     updateLoading('Connecting...', 98);
     _setupMultiplayer(animData);
@@ -108,6 +114,21 @@ async function init() {
     loadingProgress.style.width = '0%';
     console.error(e);
   }
+}
+
+function _setupWebCityExpansion() {
+    const div = document.createElement('div');
+    div.className = 'billboard';
+    div.innerHTML = `
+        <div style="background: rgba(0, 0, 0, 0.8); color: #fff; padding: 20px; border: 2px solid #4e8c6d; border-radius: 12px; text-align: center; pointer-events: auto;">
+            <h2 style="margin: 0 0 10px 0; color: #4e8c6d;">Welcome to Planetwood</h2>
+            <p style="margin: 0; font-size: 14px;">The Web City for networking!</p>
+        </div>
+    `;
+    billboard = new CSS2DObject(div);
+    // Place it near the center
+    billboard.position.set(0, 5, -10);
+    sceneSys.scene.add(billboard);
 }
 
 function _setupMultiplayer(animData) {
@@ -165,6 +186,7 @@ function animate() {
 
   if (npcSys) npcSys.update(delta);
   if (playerAvatar) playerAvatar.update(delta);
+  if (ui) ui.update(sceneSys.camera);
 
   sceneSys.controls.target.lerp(playerAvatar?.group.position || new THREE.Vector3(0, 5, 0), 0.1);
   sceneSys.update();
