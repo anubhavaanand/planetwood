@@ -24,7 +24,7 @@ export class MeshLoader {
       const mat = material || new THREE.MeshStandardMaterial({ color: 0x88aa88, skinning: true, roughness: 0.7, metalness: 0.1 });
       const mesh = new THREE.SkinnedMesh(geo, mat, skeleton);
       mesh.bind(skeleton);
-      mesh.frustumCulled = false;
+      mesh.frustumCulled = true;
       return mesh;
     });
   }

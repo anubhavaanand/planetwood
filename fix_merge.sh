@@ -1,0 +1,1 @@
+sed -i 's/textSpan.innerHTML = `<strong style="color:#d9936a">${senderName}:<\/strong> ${this._escapeHtml(text)}`;/textSpan.innerHTML = `<strong style="color:#d9936a">${this._escapeHtml(senderName)}:<\/strong> ${this._escapeHtml(text)}`;/g' src/systems/UISystem.js

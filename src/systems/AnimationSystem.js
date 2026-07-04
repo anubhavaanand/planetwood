@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
 export class AnimationSystem {
+  constructor() {
+    this._skeletonCache = new Map();
+  }
+
   findSkinEntry(animData, npcType) {
     const key = Object.keys(animData).find(k =>
       k.includes(`/${npcType}-bones.drc`) || k === `${npcType}-bones.drc`
@@ -24,7 +28,16 @@ export class AnimationSystem {
     const key = Object.keys(animData).find(k => k.includes(`/avatar-${animName}.drc`));
     return key ? animData[key] : null;
   }
-  createSkin(boneData) {
+
+  getCachedSkin(cacheKey) {
+    return this._skeletonCache.get(cacheKey) || null;
+  }
+
+  createSkin(boneData, cacheKey) {
+    if (cacheKey && this._skeletonCache.has(cacheKey)) {
+      return this._skeletonCache.get(cacheKey);
+    }
+
     const attr = boneData.attributes;
     const boneCount = boneData.vertices;
     const posArr = attr.position?.array;
@@ -62,7 +75,9 @@ export class AnimationSystem {
     }
 
     const skeleton = new THREE.Skeleton(bones);
-    return { bones, skeleton };
+    const result = { bones, skeleton };
+    if (cacheKey) this._skeletonCache.set(cacheKey, result);
+    return result;
   }
 
   createSkinAnimation(animData, skeleton) {

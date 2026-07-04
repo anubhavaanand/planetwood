@@ -41,6 +41,25 @@ export class SceneSystem {
 
     this.gltfLoader = new GLTFLoader();
     this.clock = new THREE.Clock();
+
+    this._fpsFrames = 0;
+    this._fpsTime = 0;
+    this._setupFpsCounter();
+  }
+
+  _setupFpsCounter() {
+    this.fpsEl = document.createElement('div');
+    Object.assign(this.fpsEl.style, {
+      position: 'fixed', bottom: '8px', left: '8px',
+      color: '#9ab0b4', fontSize: '12px', fontFamily: 'monospace',
+      zIndex: '999', background: 'rgba(30,40,42,0.7)',
+      padding: '4px 8px', borderRadius: '4px',       pointerEvents: 'none',
+      display: 'none',
+    });
+    document.body.appendChild(this.fpsEl);
+    if (import.meta.env?.DEV) {
+      this.fpsEl.style.display = 'block';
+    }
   }
 
   _setupLights() {
@@ -83,6 +102,43 @@ export class SceneSystem {
     return gltf;
   }
 
+  optimizeStaticMeshes(root) {
+    const groups = new Map();
+    root.traverse((child) => {
+      if (!child.isMesh || child.isSkinnedMesh) return;
+      const key = child.geometry.uuid;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(child);
+    });
+
+    for (const [geoId, meshes] of groups) {
+      if (meshes.length < 2) continue;
+      const geo = meshes[0].geometry;
+      const mat = meshes[0].material;
+      const instanced = new THREE.InstancedMesh(geo, mat, meshes.length);
+      instanced.castShadow = meshes[0].castShadow;
+      instanced.receiveShadow = meshes[0].receiveShadow;
+      const dummy = new THREE.Object3D();
+      meshes.forEach((mesh, i) => {
+        mesh.getWorldPosition(dummy.position);
+        mesh.getWorldQuaternion(dummy.quaternion);
+        mesh.getWorldScale(dummy.scale);
+        instanced.setMatrixAt(i, dummy.matrixWorld);
+        instanced.setColorAt(i, new THREE.Color(mesh.material.color));
+      });
+      instanced.instanceMatrix.needsUpdate = true;
+      if (instanced.instanceColor) instanced.instanceColor.needsUpdate = true;
+
+      const parent = meshes[0].parent;
+      for (const mesh of meshes) {
+        if (mesh.parent) mesh.parent.remove(mesh);
+        mesh.geometry.dispose();
+        if (mesh.material !== mat && mesh.material.dispose) mesh.material.dispose();
+      }
+      parent.add(instanced);
+    }
+  }
+
   async loadAnimData(url) {
     const res = await fetch(url);
     return res.json();
@@ -95,6 +151,16 @@ export class SceneSystem {
   render() {
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
+  }
+
+  updateFps(delta) {
+    this._fpsFrames++;
+    this._fpsTime += delta;
+    if (this._fpsTime >= 1) {
+      this.fpsEl.textContent = `${Math.round(this._fpsFrames / this._fpsTime)} FPS`;
+      this._fpsFrames = 0;
+      this._fpsTime = 0;
+    }
   }
 
   dispose() {

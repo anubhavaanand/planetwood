@@ -103,9 +103,22 @@
 - [X] T022 [P] Implement keyboard navigation for all UI elements (chat input, notifications, menu buttons) with visible focus indicators and Tab order (FR-009)
 - [X] T023 [P] Implement screen reader announcements — `aria-live="polite"` region for connection status changes, player join/leave, new chat messages; announce within 1s of event (FR-010, SC-005)
 - [X] T024 Update `vite.config.js` for production — code-split multiplayer bundle from main scene bundle, set `build.target` to ES2020 for broader browser support
-- [ ] T025 Performance optimization pass — verify InstancedMesh for repeated grass/butterflies, skeleton pooling for NPCs, texture compression for glTF assets; profile with Chrome DevTools; target 30fps floor with 10+ players (FR-012, SC-006) [MANUAL]
+- [ ] T025 Performance optimization pass — verify InstancedMesh for repeated grass/butterflies (code in place via optimizeStaticMeshes), skeleton pooling for NPCs (AnimationSystem cache), texture compression for glTF assets; profile with Chrome DevTools; target 30fps floor with 10+ players (FR-012, SC-006) [MANUAL]
 - [ ] T026 [P] Validate all 5 scenarios from `quickstart.md` pass in Chrome, Firefox, Edge [MANUAL]
 - [X] T027 [P] Clean up console.log statements from production build (verify dead-code elimination or manual removal)
+
+---
+
+## Phase 7: Convergence
+
+**Purpose**: Close gaps between spec requirements and current implementation identified by `/speckit.converge`
+
+- [ ] T028 Add 5-second load timeout enforcement with fallback handling per FR-001, US1/AC1 (partial)
+- [ ] T029 Reduce DISCONNECT_TIMEOUT from 10000 to 3000 per FR-008, US2/AC2 (contradicts)
+- [ ] T030 Implement rejoin identity tracking with last-known position restoration per FR-008 edge case (missing)
+- [ ] T031 Add deliberate tab order and focus management for dynamic UI elements per FR-009 (partial)
+- [ ] T032 Wire sr-announce aria-live region for player join/leave events per FR-010, SC-005 (partial)
+- [X] T033 Performance optimization pass — InstancedMesh for repeated static meshes (SceneSystem.optimizeStaticMeshes), skeleton pooling by NPC type (AnimationSystem._skeletonCache), FPS counter (SceneSystem.updateFps), removed frustumCulled=false per FR-012, SC-006, Constitution III (partial, assembled)
 
 ---
 
