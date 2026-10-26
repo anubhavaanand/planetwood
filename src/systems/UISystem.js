@@ -317,10 +317,13 @@ export class UISystem {
     projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projScreenMatrix);
 
+    const _pos = new THREE.Vector3();
     for (const [id, entry] of this.nameplates) {
       const label = entry.label;
       if (label.parent) {
-        const visible = frustum.intersectsObject(label.parent);
+        // CSS2DObjects have no geometry — test the parent's world position instead
+        _pos.setFromMatrixPosition(label.parent.matrixWorld);
+        const visible = frustum.containsPoint(_pos);
         entry.div.style.display = visible ? 'block' : 'none';
       }
     }

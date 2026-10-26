@@ -48,12 +48,12 @@ async function init() {
 
 async function initCore() {
   updateLoading('Loading planet...', 10);
-  const gltf = await sceneSys.loadScene('/scene.gltf');
+  const gltf = await sceneSys.loadScene('./scene.gltf');
   sceneSys.optimizeStaticMeshes(gltf.scene);
   updateLoading('Planet loaded', 40);
 
   updateLoading('Loading animations...', 50);
-  const animData = await sceneSys.loadAnimData('/decoded_animations.json');
+  const animData = await sceneSys.loadAnimData('./decoded_animations.json');
   updateLoading('Animations loaded', 70);
 
   updateLoading('Creating player...', 80);
@@ -74,7 +74,7 @@ async function initCore() {
     const { bones, skeleton } = animSys.createSkin(avatarBones);
     const avatarMat = new THREE.MeshStandardMaterial({ color: 0x4488cc, skinning: true, roughness: 0.6, metalness: 0.1 });
     try {
-      const avatarMesh = await meshLoader.createSkinnedMesh('/assets/avatar/avatar-idle.drc', skeleton, avatarMat);
+      const avatarMesh = await meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, avatarMat);
       playerAvatar.setSkinnedMesh(avatarMesh, skeleton);
     } catch {
       const geo = new THREE.BoxGeometry(0.8, 1.8, 0.8);
@@ -286,7 +286,7 @@ function animate() {
   sceneSys.controls.target.lerp(playerAvatar?.group.position || new THREE.Vector3(0, 5, 0), 0.1);
   sceneSys.update();
   if (ui) ui.cullNameplates(sceneSys.camera);
-  sceneSys.updateFps(delta);
+  sceneSys.updateFps();
   sceneSys.render();
 }
 

@@ -33,7 +33,7 @@ export class NPCSystem {
     const { bones, skeleton } = this.animationSystem.createSkin(skinEntry, data.npcType);
 
     if (this.meshLoader) {
-      const meshUrl = `/assets/npcs/${data.npcType}/${data.npcType}.drc`;
+      const meshUrl = `./assets/npcs/${data.npcType}/${data.npcType}.drc`;
       try {
         const mesh = await this.meshLoader.createSkinnedMesh(meshUrl, skeleton);
         npc.setSkinnedMesh(mesh, skeleton);

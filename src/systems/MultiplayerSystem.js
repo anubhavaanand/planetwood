@@ -139,7 +139,7 @@ export class MultiplayerSystem {
       };
 
       if (this.meshLoader) {
-        this.meshLoader.createSkinnedMesh('/assets/avatar/avatar-idle.drc', skeleton, mat).then(mesh => {
+        this.meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, mat).then(mesh => {
           avatar.setSkinnedMesh(mesh, skeleton);
           setupAnimations();
         }).catch(() => {

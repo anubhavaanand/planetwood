@@ -10,7 +10,7 @@ export class SceneSystem {
     this.scene.fog = new THREE.Fog(0x87CEEB, 80, 150);
 
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-    this.camera.position.set(25, 25, 35);
+    this.camera.position.set(60, 45, 70);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -41,9 +41,12 @@ export class SceneSystem {
 
     this.gltfLoader = new GLTFLoader();
     this.clock = new THREE.Clock();
+    this.clock.start();
+    this.clock.start();
 
     this._fpsFrames = 0;
     this._fpsTime = 0;
+    this._fpsLast = Date.now();
     this._setupFpsCounter();
   }
 
@@ -160,11 +163,14 @@ export class SceneSystem {
     this.labelRenderer.render(this.scene, this.camera);
   }
 
-  updateFps(delta) {
+  updateFps() {
+    const now = Date.now();
+    const delta = now - this._fpsLast;
+    this._fpsLast = now;
     this._fpsFrames++;
     this._fpsTime += delta;
-    if (this._fpsTime >= 1) {
-      const fps = Math.round(this._fpsFrames / this._fpsTime);
+    if (this._fpsTime >= 1000) {
+      const fps = Math.round((this._fpsFrames * 1000) / this._fpsTime);
       const info = this.renderer.info.render;
       const mem = this.renderer.info.memory;
       const calls = info.calls;
