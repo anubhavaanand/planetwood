@@ -2,7 +2,7 @@ import { PlayerAvatar } from '../entities/PlayerAvatar.js';
 
 const RECONNECT_DELAY = 5000;
 const SYNC_INTERVAL = 1000 / 12;
-const DISCONNECT_TIMEOUT = 10000;
+const DISCONNECT_TIMEOUT = 3000;
 const AWAY_TIMEOUT = 30000;
 
 import * as THREE from 'three';
@@ -37,7 +37,8 @@ export class MultiplayerSystem {
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
-      this.ws.send(JSON.stringify({ type: 'join' }));
+      const rejoinData = this._loadIdentity();
+      this.ws.send(JSON.stringify({ type: 'join', payload: rejoinData || {} }));
     };
 
     this.ws.onmessage = (event) => {
@@ -71,6 +72,7 @@ export class MultiplayerSystem {
         this.connected = true;
         this.assignedId = msg.payload.assignedId;
         this.displayName = msg.payload.displayName || this.displayName;
+        this._saveIdentity({ id: this.assignedId, displayName: this.displayName });
         this._log(`Joined session ${msg.payload.sessionId} as ${this.displayName}`);
         for (const peer of msg.payload.peers || []) {
           this._addRemotePlayer(peer);
@@ -421,6 +423,28 @@ export class MultiplayerSystem {
     }
     this.players.clear();
     this.connected = false;
+    this._clearIdentity();
+  }
+
+  _saveIdentity(identity) {
+    try {
+      localStorage.setItem('planetwood_identity', JSON.stringify(identity));
+    } catch (e) {}
+  }
+
+  _loadIdentity() {
+    try {
+      const data = localStorage.getItem('planetwood_identity');
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  _clearIdentity() {
+    try {
+      localStorage.removeItem('planetwood_identity');
+    } catch (e) {}
   }
 
   _log(...args) {

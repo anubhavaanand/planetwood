@@ -57,9 +57,16 @@ export class SceneSystem {
       display: 'none',
     });
     document.body.appendChild(this.fpsEl);
-    if (import.meta.env?.DEV) {
-      this.fpsEl.style.display = 'block';
-    }
+    this.fpsVisible = import.meta.env?.DEV;
+    if (this.fpsVisible) this.fpsEl.style.display = 'block';
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'F3' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        this.fpsVisible = !this.fpsVisible;
+        this.fpsEl.style.display = this.fpsVisible ? 'block' : 'none';
+      }
+    });
   }
 
   _setupLights() {
@@ -157,7 +164,14 @@ export class SceneSystem {
     this._fpsFrames++;
     this._fpsTime += delta;
     if (this._fpsTime >= 1) {
-      this.fpsEl.textContent = `${Math.round(this._fpsFrames / this._fpsTime)} FPS`;
+      const fps = Math.round(this._fpsFrames / this._fpsTime);
+      const info = this.renderer.info.render;
+      const mem = this.renderer.info.memory;
+      const calls = info.calls;
+      const triangles = info.triangles;
+      const textures = mem.textures;
+      const geometries = mem.geometries;
+      this.fpsEl.textContent = `${fps} FPS | ${calls} draw | ${triangles.toLocaleString()} tri | ${textures} tex | ${geometries} geo`;
       this._fpsFrames = 0;
       this._fpsTime = 0;
     }

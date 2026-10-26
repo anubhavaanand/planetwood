@@ -30,6 +30,7 @@ export class UISystem {
     this.inputEl.type = 'text';
     this.inputEl.maxLength = 200;
     this.inputEl.placeholder = 'Type a message...';
+    this.inputEl.setAttribute('tabindex', '-1');
     Object.assign(this.inputEl.style, {
       width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none',
       background: '#3c484a', color: '#e8dccc', fontSize: '0.95rem',
@@ -65,6 +66,8 @@ export class UISystem {
   _setupChatLog() {
     this.logEl = document.createElement('div');
     this.logEl.id = 'chat-log';
+    this.logEl.setAttribute('tabindex', '0');
+    this.logEl.setAttribute('aria-label', 'Chat log');
     Object.assign(this.logEl.style, {
       position: 'fixed', bottom: '70px', right: '16px',
       width: '280px', maxHeight: '200px', overflowY: 'auto',
@@ -79,11 +82,13 @@ export class UISystem {
 
   showInput() {
     this.inputContainer.style.display = 'flex';
+    this.inputEl.setAttribute('tabindex', '0');
     this.inputEl.focus();
   }
 
   hideInput() {
     this.inputContainer.style.display = 'none';
+    this.inputEl.setAttribute('tabindex', '-1');
     this.inputEl.blur();
   }
 
@@ -263,6 +268,8 @@ export class UISystem {
       const btn = document.createElement('button');
       btn.className = 'emote-btn';
       btn.textContent = `${em.name} (${em.key})`;
+      btn.setAttribute('tabindex', '0');
+      btn.setAttribute('aria-label', `Send ${em.name} emote`);
       Object.assign(btn.style, {
         padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(217, 147, 106, 0.3)',
         background: 'rgba(60,72,74,0.9)', color: '#e8dccc', fontSize: '0.85rem',
@@ -272,6 +279,13 @@ export class UISystem {
       });
       btn.addEventListener('click', () => {
         if (this.onTriggerEmote) this.onTriggerEmote(em.type);
+      });
+
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (this.onTriggerEmote) this.onTriggerEmote(em.type);
+        }
       });
 
       btn.addEventListener('mouseenter', () => {

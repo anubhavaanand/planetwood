@@ -34,15 +34,21 @@ class Session {
 
   get playerCount() { return this.players.size; }
 
-  addPlayer(ws) {
+  addPlayer(ws, rejoinData) {
     const id = generateId();
-    let name = generateName();
-    let suffix = 0;
-    while ([...this.players.values()].some(p => p.displayName === name)) {
-      suffix++;
-      name = generateName() + suffix;
+    let name;
+    if (rejoinData?.displayName) {
+      name = rejoinData.displayName;
+    } else {
+      name = generateName();
+      let suffix = 0;
+      while ([...this.players.values()].some(p => p.displayName === name)) {
+        suffix++;
+        name = generateName() + suffix;
+      }
     }
-    const player = { id, displayName: name, ws, position: [0, 2, 0] };
+    const position = rejoinData?.position || [0, 2, 0];
+    const player = { id, displayName: name, ws, position };
     this.players.set(id, player);
     this._cancelTimeout();
     return player;
@@ -99,24 +105,7 @@ wss.on('connection', (ws) => {
     return;
   }
 
-  const player = session.addPlayer(ws);
-  console.log(`[join] ${player.displayName} (${player.id})`);
-
-  ws.send(JSON.stringify({
-    type: 'joined',
-    payload: {
-      sessionId: 'planetwood-001',
-      assignedId: player.id,
-      displayName: player.displayName,
-      peers: session.getPeers(player.id),
-    },
-  }));
-
-  session.broadcast('peer_joined', {
-    id: player.id,
-    displayName: player.displayName,
-    position: player.position,
-  }, player.id);
+  let player = null;
 
   ws.on('message', (raw) => {
     let msg;
@@ -126,6 +115,30 @@ wss.on('connection', (ws) => {
       ws.send(JSON.stringify({ type: 'error', payload: { code: 'INVALID_MESSAGE', message: 'Malformed message' } }));
       return;
     }
+
+    if (msg.type === 'join' && !player) {
+      player = session.addPlayer(ws, msg.payload);
+      console.log(`[join] ${player.displayName} (${player.id})`);
+
+      ws.send(JSON.stringify({
+        type: 'joined',
+        payload: {
+          sessionId: 'planetwood-001',
+          assignedId: player.id,
+          displayName: player.displayName,
+          peers: session.getPeers(player.id),
+        },
+      }));
+
+      session.broadcast('peer_joined', {
+        id: player.id,
+        displayName: player.displayName,
+        position: player.position,
+      }, player.id);
+      return;
+    }
+
+    if (!player) return;
 
     switch (msg.type) {
       case 'signal': {
@@ -152,9 +165,11 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log(`[leave] ${player.displayName} (${player.id})`);
-    session.removePlayer(player.id);
-    session.broadcast('peer_left', { id: player.id }, player.id);
+    if (player) {
+      console.log(`[leave] ${player.displayName} (${player.id})`);
+      session.removePlayer(player.id);
+      session.broadcast('peer_left', { id: player.id }, player.id);
+    }
   });
 });
 
