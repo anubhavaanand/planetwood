@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood Notifications</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: rgba(40, 52, 54, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --backdrop-blur: blur(8px);
+    }
+
+    #notifications-container {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 300;
+      pointer-events: none;
+    }
+
+    .toast {
+      position: relative;
+      max-width: 400px;
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--dark-bg);
+      backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      border-left: 4px solid var(--primary-green);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      color: var(--white-text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.4;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: all;
+      user-select: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toast.hide {
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .toast {
+        transition: opacity 0.3s ease;
+      }
+      .toast.show,
+      .toast.hide {
+        transform: none !important;
+      }
+    }
+
+    .toast.join { border-left-color: var(--primary-green); }
+    .toast.leave { border-left-color: #c0392b; }
+    .toast.system { border-left-color: #f39c12; }
+    .toast.achievement { border-left-color: #9b59b6; }
+  </style>
+</head>
+<body>
+  <div id="notifications-container" role="status" aria-live="polite"></div>
+
+  <script>
+    const Notifications = {
+      container: document.getElementById('notifications-container'),
+      maxVisible: 3,
+
+      init() {
+        if (!this.container) {
+          const container = document.createElement('div');
+          container.id = 'notifications-container';
+          container.setAttribute('role', 'status');
+          container.setAttribute('aria-live', 'polite');
+          document.body.appendChild(container);
+          this.container = container;
+        }
+      },
+
+      escapeHtml(text) {
+        const map = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
+      },
+
+      show(options = {}) {
+        this.init();
+        const { text, type = 'system', duration = 4000 } = options;
+        const escapedText = this.escapeHtml(text);
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.setAttribute('role', 'status');
+        toast.innerHTML = `<div>${escapedText}</div>`;
+
+        // Set border color based on type
+        const borderColors = {
+          join: 'var(--primary-green)',
+          leave: '#c0392b',
+          system: '#f39c12',
+          achievement: '#9b59b6',
+          default: 'var(--primary-green)'
+        };
+        toast.style.borderLeftColor = borderColors[type] || borderColors.default;
+
+        this.container.appendChild(toast);
+
+        // Trigger reflow for animation
+        void toast.offsetWidth;
+
+        toast.classList.add('show');
+
+        // Auto-dismiss timeout
+        const timeoutId = setTimeout(() => {
+          this.hideToast(toast);
+        }, duration);
+        toast._timeoutId = timeoutId;
+
+        // Click to dismiss
+        toast.addEventListener('click', () => {
+          this.hideToast(toast);
+        });
+
+        // Enforce max visible toasts
+        if (this.container.children.length > this.maxVisible) {
+          const oldestToast = this.container.firstElementChild;
+          // Remove immediately without animation
+          oldestToast.classList.remove('show');
+          oldestToast.classList.add('hide');
+          // Wait for transition end to remove from DOM
+          oldestToast.addEventListener('transitionend', function handler(e) {
+            if (e.propertyName === 'opacity') {
+              oldestToast.removeEventListener('transitionend', handler);
+              clearTimeout(oldestToast._timeoutId);
+              oldestToast.remove();
+            }
+          }, { once: true });
+        }
+
+        return toast;
+      },
+
+      hideToast(toast) {
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        toast.addEventListener('transitionend', function handler(e) {
+          if (e.propertyName === 'opacity') {
+            toast.removeEventListener('transitionend', handler);
+            clearTimeout(toast._timeoutId);
+            toast.remove();
+          }
+        }, { once: true });
+      },
+
+      clear() {
+        this.init();
+        while (this.container.firstChild) {
+          const toast = this.container.firstChild;
+          clearTimeout(toast._timeoutId);
+          this.container.removeChild(toast);
+        }
+      }
+    };
+
+    // Initialize container if not present
+    if (!document.getElementById('notifications-container')) {
+      Notifications.init();
+    }
+
+    // Make Notifications globally accessible
+    window.Notifications = Notifications;
+  </script>
+</body>
+</html>

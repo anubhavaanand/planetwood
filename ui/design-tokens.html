@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood Design Tokens</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: #283436;
+      --white: #ffffff;
+      --muted: rgba(255,255,255,0.6);
+      --accent: #5da37d;
+      --border: rgba(255,255,255,0.1);
+      --red: #c0392b;
+      --amber: #f39c12;
+      --purple: #9b59b6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--dark-bg);
+      color: var(--white);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; }
+
+    h1 { text-align: center; margin-bottom: 32px; font-size: 28px; letter-spacing: 0.5px; }
+    section { margin-bottom: 40px; }
+
+    h2 {
+      color: var(--white); margin-bottom: 20px; font-size: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    h2::before {
+      content: ''; display: inline-block; width: 4px; height: 20px;
+      background-color: var(--primary-green);
+    }
+
+    .colors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+    .color-item {
+      background-color: rgba(255,255,255,0.05); border-radius: 8px;
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .swatch { width: 40px; height: 40px; border-radius: 8px; }
+    .color-info { display: flex; flex-direction: column; gap: 4px; }
+    .hex { font-family: 'Courier New', monospace; font-size: 14px; color: var(--white); }
+    .var { font-size: 13px; color: var(--muted); }
+    .desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+    .type-scale { display: grid; gap: 16px; }
+    .type-item { display: flex; align-items: center; gap: 12px; }
+    .type-label { min-width: 60px; font-size: 13px; color: var(--muted); }
+    .type-sample { line-height: 1.4; }
+
+    .spacing-demo { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .spacing-label { min-width: 60px; font-size: 13px; color: var(--muted); }
+    .spacing-bar { height: 4px; background-color: rgba(255,255,255,0.2); border-radius: 2px; }
+
+    .radius-demo { display: flex; gap: 24px; align-items: center; }
+    .radius-box { width: 80px; height: 40px; background-color: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--white); }
+
+    @media (max-width: 600px) { .colors-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Planetwood Design Tokens</h1>
+
+    <section>
+      <h2>Colors</h2>
+      <div class="colors-grid">
+        <div class="color-item"><div class="swatch" style="background-color: #4e8c6d;"></div><div class="color-info"><div class="hex">#4e8c6d</div><div class="var">--primary-green</div><div class="desc">Primary brand color</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #283436;"></div><div class="color-info"><div class="hex">#283436</div><div class="var">--dark-bg</div><div class="desc">Main background color</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #ffffff;"></div><div class="color-info"><div class="hex">#ffffff</div><div class="var">--white</div><div class="desc">Primary text color</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: rgba(255,255,255,0.6);"></div><div class="color-info"><div class="hex">rgba(255,255,255,0.6)</div><div class="var">--muted</div><div class="desc">Secondary text, placeholders</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #5da37d;"></div><div class="color-info"><div class="hex">#5da37d</div><div class="var">--accent</div><div class="desc">Hover states, active elements</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: rgba(255,255,255,0.1);"></div><div class="color-info"><div class="hex">rgba(255,255,255,0.1)</div><div class="var">--border</div><div class="desc">Subtle dividers, input borders</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #c0392b;"></div><div class="color-info"><div class="hex">#c0392b</div><div class="var">--red</div><div class="desc">Error states, critical warnings</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #f39c12;"></div><div class="color-info"><div class="hex">#f39c12</div><div class="var">--amber</div><div class="desc">Warning states, secondary actions</div></div></div>
+        <div class="color-item"><div class="swatch" style="background-color: #9b59b6;"></div><div class="color-info"><div class="hex">#9b59b6</div><div class="var">--purple</div><div class="desc">Achievements, special events</div></div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Typography</h2>
+      <div class="type-scale">
+        <div class="type-item"><div class="type-label">10px</div><div class="type-sample" style="font-size:10px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">12px</div><div class="type-sample" style="font-size:12px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">14px</div><div class="type-sample" style="font-size:14px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">16px</div><div class="type-sample" style="font-size:16px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">18px</div><div class="type-sample" style="font-size:18px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">20px</div><div class="type-sample" style="font-size:20px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">22px</div><div class="type-sample" style="font-size:22px;">The quick brown fox jumps over the lazy dog</div></div>
+        <div class="type-item"><div class="type-label">24px</div><div class="type-sample" style="font-size:24px;">The quick brown fox jumps over the lazy dog</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Spacing</h2>
+      <div class="spacing-demo"><div class="spacing-label">4px</div><div class="spacing-bar" style="width:4px;"></div></div>
+      <div class="spacing-demo"><div class="spacing-label">8px</div><div class="spacing-bar" style="width:8px;"></div></div>
+      <div class="spacing-demo"><div class="spacing-label">12px</div><div class="spacing-bar" style="width:12px;"></div></div>
+      <div class="spacing-demo"><div class="spacing-label">16px</div><div class="spacing-bar" style="width:16px;"></div></div>
+      <div class="spacing-demo"><div class="spacing-label">24px</div><div class="spacing-bar" style="width:24px;"></div></div>
+    </section>
+
+    <section>
+      <h2>Radius</h2>
+      <div class="radius-demo">
+        <div class="radius-box" style="border-radius:8px;">8px</div>
+        <div class="radius-box" style="border-radius:12px;">12px</div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
