@@ -9,7 +9,7 @@ import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
 
-const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3001';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3005';
 const FALLBACK_TIMEOUT = 5000;
 const LOAD_TIMEOUT = 5000;
 
@@ -74,13 +74,11 @@ async function initCore() {
     const { bones, skeleton } = animSys.createSkin(avatarBones);
     const avatarMat = new THREE.MeshStandardMaterial({ color: 0x4488cc, skinning: true, roughness: 0.6, metalness: 0.1 });
     try {
-      const avatarMesh = await meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, avatarMat);
+      const avatarMesh = await meshLoader.createSkinnedMesh('./assets/avatar/accessories/base.glb', skeleton, avatarMat);
       playerAvatar.setSkinnedMesh(avatarMesh, skeleton);
     } catch {
-      const geo = new THREE.BoxGeometry(0.8, 1.8, 0.8);
-      const mesh = new THREE.SkinnedMesh(geo, avatarMat, skeleton);
-      mesh.bind(skeleton);
-      playerAvatar.setSkinnedMesh(mesh, skeleton);
+      const avatarMesh = await meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, avatarMat);
+      playerAvatar.setSkinnedMesh(avatarMesh, skeleton);
     }
   }
 
@@ -196,21 +194,6 @@ function _setupMultiplayer(animData) {
       }, 4000);
     }
   };
-  multiplayer.onAwayStateChanged = (isAway) => {
-    if (isAway) {
-      ui.addNameplate(playerAvatar, 'You', true);
-      ui.addNameplate(playerAvatar, 'You [Away]', true);
-    } else {
-      ui.addNameplate(playerAvatar, 'You', true);
-    }
-  };
-  multiplayer.onPlayerAwayChanged = (peerId, isAway) => {
-    const avatar = multiplayer.players.get(peerId);
-    if (avatar) {
-      const baseName = avatar.displayName;
-      ui.addNameplate(avatar, isAway ? `${baseName} [Away]` : baseName);
-    }
-  };
 
   fallbackTimer = setTimeout(() => {
     if (multiplayer && !multiplayer.connected && ui) {
@@ -222,9 +205,11 @@ function _setupMultiplayer(animData) {
   }, FALLBACK_TIMEOUT);
 
   multiplayer.connect();
-  multiplayer.ws?.addEventListener('open', () => {
-    srAnnounce('Connected to multiplayer');
-  });
+  if (multiplayer.socket) {
+    multiplayer.socket.addEventListener('open', () => {
+      srAnnounce('Connected to multiplayer');
+    });
+  }
 }
 
 function updateLoading(text, percent) {

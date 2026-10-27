@@ -42,7 +42,6 @@ export class SceneSystem {
     this.gltfLoader = new GLTFLoader();
     this.clock = new THREE.Clock();
     this.clock.start();
-    this.clock.start();
 
     this._fpsFrames = 0;
     this._fpsTime = 0;

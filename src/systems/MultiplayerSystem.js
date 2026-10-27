@@ -1,116 +1,268 @@
+import * as protobuf from 'protobufjs';
+import * as THREE from 'three';
 import { PlayerAvatar } from '../entities/PlayerAvatar.js';
 
-const RECONNECT_DELAY = 5000;
-const SYNC_INTERVAL = 1000 / 12;
-const DISCONNECT_TIMEOUT = 3000;
-const AWAY_TIMEOUT = 30000;
+const SYNC_INTERVAL = 1000 / 35;
+const PING_RATE = 1000 / 20;
+const CLIENTS_LIMIT = 15;
+const ROOM_PREFIX = 'default';
+const RECONNECT_DELAY = 1000;
 
-import * as THREE from 'three';
+let protoRoot = null;
+let RealmData = null;
+
+async function loadRealmData() {
+  if (RealmData) return RealmData;
+  protoRoot = await protobuf.load('src/proto/realm.proto');
+  RealmData = protoRoot.lookupType('RealmData');
+  return RealmData;
+}
 
 export class MultiplayerSystem {
-  constructor(url, scene, animSys, animData, meshLoader) {
+  constructor(url = 'ws://localhost:3005', scene, animSys, animData, meshLoader) {
     this.url = url;
+    this.servers = [url];
     this.scene = scene;
     this.animSys = animSys;
     this.animData = animData;
     this.meshLoader = meshLoader;
+
     this.connected = false;
-    this.assignedId = null;
-    this.displayName = '';
+    this.serverIndex = 0;
+    this.serverFirstConnection = true;
+    this.serverPing = 20;
+    this.serverTimeDiff = 0;
+
+    this.roomPrefix = ROOM_PREFIX;
+    this.roomRequested = '';
+    this.clients = new Map();
+    this.clientsLimit = CLIENTS_LIMIT;
+    this.localID = null;
+    this.localIDLength = 0;
+
+    this._protoMsg = null;
+    this._protoMsgFields = 0;
+
+    this._updateRate = SYNC_INTERVAL;
+    this._pingRate = PING_RATE;
+    this._data = {
+      p: [0, 2, 0],
+      r: [0, 0, 0],
+      medium: 0,
+      animation: 0,
+      bonesFile: 'avatar/avatar-bones',
+      modelFiles: ['avatar/avatar'],
+      animationFiles: ['avatar/avatar-idle', 'avatar/avatar-walk', 'avatar/avatar-run', 'avatar/avatar-air', 'avatar/avatar-afk'],
+      tag: '',
+      networkEvent: '',
+    };
+    this._prevData = JSON.stringify(this._data);
+
+    this._updateInterval = null;
+    this._pingInterval = null;
+    this._relayInterval = null;
+    this._retryInterval = null;
+
+    this.socket = null;
+    this.socketCreated = false;
+    this._boundOpen = this._open.bind(this);
+    this._boundMessage = this._message.bind(this);
+    this._boundClose = this._close.bind(this);
+    this._boundPing = this._ping.bind(this);
+    this._boundRelay = this._relay.bind(this);
+
     this.players = new Map();
-    this.pcs = new Map();
-    this.syncInterval = null;
-    this.awayTimer = null;
-    this.away = false;
-    this.localPosition = new Float32Array(3);
-    this.localRotation = new Float32Array(4);
-    this.localAnimation = 'idle';
-    this.onNotification = null;
     this.onPlayerJoined = null;
     this.onPlayerLeft = null;
-    this.onAwayStateChanged = null;
-    this.onPlayerAwayChanged = null;
+    this.onChatMessage = null;
     this.onEmote = null;
+    this.onNotification = null;
+
+    loadRealmData().then(msg => {
+      this._protoMsg = msg;
+      this._protoMsgFields = Object.keys(msg.fields).length;
+    });
   }
 
   connect() {
-    this.ws = new WebSocket(this.url);
-
-    this.ws.onopen = () => {
-      const rejoinData = this._loadIdentity();
-      this.ws.send(JSON.stringify({ type: 'join', payload: rejoinData || {} }));
-    };
-
-    this.ws.onmessage = (event) => {
-      let msg;
-      try { msg = JSON.parse(event.data); } catch { return; }
-      this._handleMessage(msg);
-    };
-
-    this.ws.onclose = () => {
-      this.connected = false;
-      this._log('Connection closed');
-      if (this.onNotification) this.onNotification('Multiplayer disconnected');
-      
-      // Auto-reconnect if not explicitly disconnected
-      if (this.ws) {
-        this._log(`Reconnecting in ${RECONNECT_DELAY}ms...`);
-        setTimeout(() => {
-          if (this.ws) this.connect();
-        }, RECONNECT_DELAY);
-      }
-    };
-
-    this.ws.onerror = () => {
-      this._log('WebSocket error');
-    };
+    this._createSocket();
   }
 
-  _handleMessage(msg) {
-    switch (msg.type) {
-      case 'joined': {
-        this.connected = true;
-        this.assignedId = msg.payload.assignedId;
-        this.displayName = msg.payload.displayName || this.displayName;
-        this._saveIdentity({ id: this.assignedId, displayName: this.displayName });
-        this._log(`Joined session ${msg.payload.sessionId} as ${this.displayName}`);
-        for (const peer of msg.payload.peers || []) {
-          this._addRemotePlayer(peer);
-        }
-        this._startSync();
-        this._setupAwayDetection();
-        break;
-      }
-      case 'peer_joined': {
-        this._addRemotePlayer(msg.payload);
-        break;
-      }
-      case 'peer_left': {
-        this._removeRemotePlayer(msg.payload.id);
-        break;
-      }
-      case 'signal': {
-        this._handleSignal(msg.payload);
-        break;
-      }
-      case 'error': {
-        this._log(`Server error: ${msg.payload.message}`);
-        break;
+  _createSocket() {
+    this.socket = new WebSocket(this.servers[this.serverIndex], 'permessage-deflate');
+    this.socket.binaryType = 'arraybuffer';
+    this.socket.onopen = this._boundOpen;
+    this.socket.onmessage = this._boundMessage;
+    this.socket.onerror = this._boundClose;
+    this.socket.onclose = this._boundClose;
+    this.socketCreated = true;
+  }
+
+  _forceConnectionState(state) {
+    this._close(false);
+    if (this.socketCreated && state) this._createSocket();
+  }
+
+  _open() {
+    this.serverFirstConnection = false;
+    this.connected = true;
+    this._onConnect();
+  }
+
+  _close(force = true) {
+    if (this.socketCreated) {
+      ['onopen', 'onmessage', 'onclose', 'onerror'].forEach(k => { this.socket[k] = null; });
+      clearInterval(this._pingInterval);
+      clearInterval(this._relayInterval);
+      clearInterval(this._retryInterval);
+      this.socket.close();
+    }
+    if (this.connected) {
+      this.connected = false;
+      this._onDisconnect();
+      if (this.onNotification) this.onNotification('Multiplayer disconnected');
+    }
+    if (force !== false) {
+      if (this.serverFirstConnection) {
+        this.serverIndex = (this.serverIndex + 1) % this.servers.length;
+        this._retryInterval = setInterval(() => {
+          clearInterval(this._retryInterval);
+          this._createSocket();
+        }, RECONNECT_DELAY);
+      } else {
+        this._retryInterval = setInterval(() => {
+          if (Object.keys(this._retrieveChangedData()).length > 0) {
+            clearInterval(this._retryInterval);
+            this._createSocket();
+          }
+        }, RECONNECT_DELAY);
       }
     }
   }
 
-  _addRemotePlayer(data) {
-    if (this.players.has(data.id)) return;
-    const avatar = new PlayerAvatar({
-      id: data.id,
-      displayName: data.displayName,
-      position: new THREE.Vector3().fromArray(data.position || [0, 2, 0]),
-    });
+  _onConnect() {
+    if (this.onNotification) this.onNotification('Multiplayer connected');
+  }
 
-    // Generate unique color tint based on display name
+  _onDisconnect() {
+    if (this.onNotification) this.onNotification('Multiplayer disconnected');
+  }
+
+  _message(event) {
+    try {
+      if (typeof event.data !== 'string') {
+        const decoder = new TextDecoder();
+        const localIdStr = decoder.decode(event.data.slice(0, this.localIDLength));
+        const msg = RealmData.decode(new Uint8Array(event.data.slice(this.localIDLength)));
+        const keys = Object.keys(msg);
+        const client = this.clients.get(localIdStr);
+        if (client) {
+          keys.forEach(k => {
+            if (msg[k] instanceof Array && msg[k].length === 0) return;
+            client[k] = msg[k];
+          });
+        } else {
+          if (this.clients.size >= this.clientsLimit ||
+              keys.reduce((h, d) => (msg[d] instanceof Array && msg[d].length === 0 ? h : h + 1), 0) !== this._protoMsgFields) {
+            return;
+          }
+          this.clients.set(localIdStr, msg);
+          this._addClient(localIdStr, msg);
+        }
+        return;
+      }
+
+      const json = JSON.parse(event.data);
+      if (json.PONG && typeof json.PONG === 'number') {
+        const now = Date.now();
+        this.serverPing = Math.max(0, (now - json.PONG) * 0.5);
+        this.serverTimeDiff = now - (json.t || now) - this.serverPing;
+      } else if (json.id && typeof json.id === 'string') {
+        this.localID = json.id;
+        this.localIDLength = this.localID.length;
+        this._requestRoom(this.roomRequested);
+      } else if (json.r && typeof json.r === 'string') {
+        this.clients.clear();
+        this.roomRequested = json.r;
+        clearInterval(this._pingInterval);
+        this._pingInterval = setInterval(this._boundPing, this._pingRate * 1000);
+        clearInterval(this._relayInterval);
+        this._relayInterval = setInterval(this._boundRelay, this._updateRate);
+        this._ping();
+        this._relay(true);
+        this._onRoomJoined(this.roomRequested);
+      } else if (json.data) {
+        if (this.onChatMessage) this.onChatMessage(json.data);
+      } else if (json.leave && typeof json.leave === 'string') {
+        if (!this.clients.has(json.leave)) return;
+        this.clients.delete(json.leave);
+        this._removeClient(json.leave);
+      }
+    } catch {}
+  }
+
+  _onRoomJoined(room) {
+    if (this.onNotification) this.onNotification(`Joined room: ${room}`);
+  }
+
+  _ping() {
+    this._sendJson({ ping: Date.now() });
+  }
+
+  _requestRoom(room = '') {
+    this.roomRequested = room;
+    this._sendJson({ r: [this.roomPrefix, this.roomRequested] });
+  }
+
+  _retrieveChangedData() {
+    const prev = JSON.parse(this._prevData);
+    const changed = {};
+    Object.keys(this._data).forEach(k => {
+      if (JSON.stringify(prev[k]) !== JSON.stringify(this._data[k])) changed[k] = this._data[k];
+    });
+    return changed;
+  }
+
+  _relay(force = false) {
+    if (force) {
+      this._prevData = JSON.stringify(this._data);
+      this._sendRelayedData(JSON.parse(this._prevData));
+    } else {
+      const changed = this._retrieveChangedData();
+      if (Object.keys(changed).length === 0) return;
+      this._prevData = JSON.stringify(this._data);
+      this._sendRelayedData(changed);
+    }
+  }
+
+  _sendJson(obj) {
+    if (!this.connected) return;
+    this.socket.send(JSON.stringify(obj));
+  }
+
+  _sendRelayedData(obj) {
+    if (!this.connected) return;
+    const verification = RealmData.verify(obj);
+    if (verification) {
+      console.warn('websocket data error', verification);
+      return;
+    }
+    const msg = RealmData.create(obj);
+    const bytes = RealmData.encode(msg).finish();
+    const prefix = this.localID ? new TextEncoder().encode(this.localID) : new Uint8Array(0);
+    const combined = new Uint8Array(prefix.length + bytes.length);
+    combined.set(prefix, 0);
+    combined.set(bytes, prefix.length);
+    this.socket.send(combined);
+  }
+
+  _addClient(id, data) {
+    if (this.players.has(id)) return;
+    const position = data.p && data.p.length === 3 ? new THREE.Vector3().fromArray(data.p) : new THREE.Vector3(0, 2, 0);
+    const rotation = data.r && data.r.length === 3 ? new THREE.Euler().fromArray(data.r) : new THREE.Euler();
+
     let hash = 0;
-    const name = data.displayName || '';
+    const name = data.tag || '';
     for (let i = 0; i < name.length; i++) {
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
@@ -118,10 +270,19 @@ export class MultiplayerSystem {
     const color = new THREE.Color().setHSL(hue / 360, 0.75, 0.55);
 
     const skinEntry = this.animSys.findAvatarBones(this.animData);
-    if (skinEntry && !avatar.skeleton) {
+    const avatar = new PlayerAvatar({
+      id,
+      displayName: data.tag || 'Player',
+      position,
+    });
+
+    this.scene.add(avatar.group);
+    this.players.set(id, avatar);
+
+    if (skinEntry) {
       const { bones, skeleton } = this.animSys.createSkin(skinEntry);
-      const mat = new THREE.MeshStandardMaterial({ color: color, skinning: true, roughness: 0.6, metalness: 0.1 });
-      
+      const mat = new THREE.MeshStandardMaterial({ color, skinning: true, roughness: 0.6, metalness: 0.1 });
+
       const setupAnimations = () => {
         const animNames = ['idle', 'walk', 'run', 'afk1', 'afk2', 'afk3'];
         for (const name of animNames) {
@@ -139,41 +300,43 @@ export class MultiplayerSystem {
       };
 
       if (this.meshLoader) {
-        this.meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, mat).then(mesh => {
+        const glbUrl = `./assets/avatar/avatar.glb`;
+        this.meshLoader.createSkinnedMesh(glbUrl, skeleton, mat).then(mesh => {
           avatar.setSkinnedMesh(mesh, skeleton);
           setupAnimations();
         }).catch(() => {
-          this._fallbackRemoteMesh(avatar, skeleton, color);
-          setupAnimations();
+          this.meshLoader.createSkinnedMesh('./assets/avatar/avatar-idle.drc', skeleton, mat).then(mesh => {
+            avatar.setSkinnedMesh(mesh, skeleton);
+            setupAnimations();
+          }).catch(() => {
+            this._fallbackRemoteMesh(avatar, skeleton, color);
+            setupAnimations();
+          });
         });
       } else {
         this._fallbackRemoteMesh(avatar, skeleton, color);
         setupAnimations();
       }
+    } else {
+      this._fallbackRemoteMesh(avatar, skeleton || null, color);
     }
 
-    this.scene.add(avatar.group);
-    this.players.set(data.id, avatar);
-    this._log(`Peer joined: ${data.displayName}`);
-    if (this.onPlayerJoined) this.onPlayerJoined(data);
+    if (this.onPlayerJoined) this.onPlayerJoined({ id, displayName: data.tag || 'Player' });
   }
 
   _fallbackRemoteMesh(avatar, skeleton, color) {
     const geo = new THREE.BoxGeometry(0.8, 1.8, 0.8);
-    const mat = new THREE.MeshStandardMaterial({ color: color, skinning: true });
+    const mat = new THREE.MeshStandardMaterial({ color, skinning: true });
     const mesh = new THREE.SkinnedMesh(geo, mat, skeleton);
-    mesh.bind(skeleton);
+    if (skeleton) mesh.bind(skeleton);
     avatar.setSkinnedMesh(mesh, skeleton);
   }
 
-  _removeRemotePlayer(id) {
+  _removeClient(id) {
     const avatar = this.players.get(id);
     if (avatar) {
       this.scene.remove(avatar.group);
-      
-      // Clear timeout and dispose geometry/materials to prevent memory leaks
-      if (avatar.emoteTimeout) clearTimeout(avatar.emoteTimeout);
-      avatar.group.traverse((child) => {
+      avatar.group.traverse(child => {
         if (child.isMesh) {
           child.geometry.dispose();
           if (Array.isArray(child.material)) {
@@ -185,214 +348,61 @@ export class MultiplayerSystem {
       });
       this.players.delete(id);
     }
-
-    if (this.pcs.has(id)) {
-      const pc = this.pcs.get(id);
-      pc.close();
-      this.pcs.delete(id);
-      this._log(`Closed PeerConnection with peer: ${id}`);
-    }
-
-    this._log(`Peer left: ${avatar ? avatar.displayName : id}`);
     if (this.onPlayerLeft) this.onPlayerLeft(id);
   }
 
-  _handleSignal(payload) {
-    const { from, data } = payload;
-    if (!this.pcs.has(from)) {
-      this._createPeerConnection(from);
-    }
-    const pc = this.pcs.get(from);
-    if (data.type === 'offer') {
-      pc.setRemoteDescription(new RTCSessionDescription(data));
-      pc.createAnswer().then((answer) => {
-        pc.setLocalDescription(answer);
-        this._sendSignal(from, answer);
-      });
-    } else if (data.type === 'answer') {
-      pc.setRemoteDescription(new RTCSessionDescription(data));
-    } else if (data.candidate) {
-      pc.addIceCandidate(new RTCIceCandidate(data));
-    }
-  }
-
-  _createPeerConnection(peerId) {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    this.pcs.set(peerId, pc);
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        this._sendSignal(peerId, e.candidate);
-      }
-    };
-
-    pc.ondatachannel = (e) => {
-      this._setupDataChannel(e.channel, peerId);
-    };
-
-    const dc = pc.createDataChannel('state');
-    this._setupDataChannel(dc, peerId);
-
-    pc.createOffer().then((offer) => {
-      pc.setLocalDescription(offer);
-      this._sendSignal(peerId, offer);
-    });
-  }
-
-  _setupDataChannel(dc, peerId) {
-    dc.onmessage = (e) => {
-      let msg;
-      try { msg = JSON.parse(e.data); } catch { return; }
-      this._handleDataMessage(msg, peerId);
-    };
-    dc.onopen = () => this._log(`DataChannel open with ${peerId}`);
-    dc.onclose = () => this._log(`DataChannel closed with ${peerId}`);
-  }
-
-  _handleDataMessage(msg, peerId) {
-    const avatar = this.players.get(peerId);
-    if (!avatar) return;
-    switch (msg.type) {
-      case 'state': {
-        avatar.group.position.fromArray(msg.position);
-        if (msg.rotation) avatar.group.quaternion.fromArray(msg.rotation);
-        
-        const nextAnim = msg.animation || 'idle';
-        if (avatar.animationState !== nextAnim) {
-          avatar.playAnimation(nextAnim);
-        }
-
-        if (avatar.away !== msg.away) {
-          avatar.away = msg.away;
-          if (this.onPlayerAwayChanged) {
-            this.onPlayerAwayChanged(peerId, msg.away);
-          }
-        }
-        
-        avatar.lastSeenAt = Date.now();
-        break;
-      }
-      case 'chat': {
-        if (this.onChatMessage) {
-          this.onChatMessage({ senderId: peerId, senderName: avatar.displayName, text: msg.text, timestamp: msg.timestamp });
-        }
-        break;
-      }
-      case 'emote': {
-        if (this.onEmote) this.onEmote(peerId, msg.emote);
-        break;
-      }
-    }
-  }
-
   _sendSignal(to, data) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'signal', payload: { to, data } }));
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: 'signal', payload: { to, data } }));
     }
   }
 
   _startSync() {
-    this.syncInterval = setInterval(() => {
+    this._updateInterval = setInterval(() => {
       if (!this.connected) return;
-      for (const [peerId, pc] of this.pcs) {
-        if (pc.connectionState !== 'connected') continue;
-        const dc = pc.dataChannels?.[0] || pc.createDataChannel('state');
-        if (dc.readyState === 'open') {
-          dc.send(JSON.stringify({
-            type: 'state',
-            position: Array.from(this.localPosition),
-            rotation: Array.from(this.localRotation),
-            animation: this.localAnimation,
-            away: this.away,
-          }));
-        }
-      }
-
-      // Periodically sync position to WebSocket relay server so new peers receive correct initial positions
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({
-          type: 'state',
-          payload: {
-            position: Array.from(this.localPosition)
-          }
-        }));
-      }
+      this._relay(false);
     }, SYNC_INTERVAL);
   }
 
   _setupAwayDetection() {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        this.awayTimer = setTimeout(() => {
-          this.away = true;
-          this.localAnimation = 'afk1';
-          this._broadcastState();
-          this._log('Away');
-          if (this.onAwayStateChanged) this.onAwayStateChanged(true);
-        }, AWAY_TIMEOUT);
+        this._data.animation = 1;
+        this._relay(true);
+        if (this.onNotification) this.onNotification('Away');
       } else {
-        if (this.awayTimer) {
-          clearTimeout(this.awayTimer);
-          this.awayTimer = null;
-        }
-        if (this.away) {
-          this.away = false;
-          this.localAnimation = 'idle';
-          this._broadcastState();
-          this._log('Back');
-          if (this.onAwayStateChanged) this.onAwayStateChanged(false);
-        }
+        this._data.animation = 0;
+        this._relay(true);
+        if (this.onNotification) this.onNotification('Back');
       }
     });
   }
 
-  _broadcastState() {
-    for (const [peerId, pc] of this.pcs) {
-      if (pc.connectionState !== 'connected') continue;
-      const dc = pc.dataChannels?.[0];
-      if (dc?.readyState === 'open') {
-        dc.send(JSON.stringify({
-          type: 'state',
-          position: Array.from(this.localPosition),
-          rotation: Array.from(this.localRotation),
-          animation: this.localAnimation,
-          away: this.away,
-        }));
-      }
-    }
-  }
-
   setLocalState(position, quaternion, animation) {
-    this.localPosition = [position.x, position.y, position.z];
-    this.localRotation = [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
-    this.localAnimation = animation || 'idle';
+    this._data.p = [position.x, position.y, position.z];
+    this._data.r = [quaternion.x, quaternion.y, quaternion.z, quaternion.w];
+    this._data.animation = animation === 'wave' ? 1 : animation === 'stretch' ? 2 : animation === 'look' ? 3 : 0;
+    this._relay(false);
   }
 
   sendChat(text) {
-    for (const [peerId, pc] of this.pcs) {
-      if (pc.connectionState !== 'connected') continue;
-      const dc = pc.dataChannels?.[0];
-      if (dc?.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'chat', text, timestamp: Date.now() }));
-      }
-    }
+    this._sendJson({ data: { sender: this.localID || 'local', text, timestamp: Date.now() } });
   }
 
   sendEmote(type) {
-    for (const [peerId, pc] of this.pcs) {
-      if (pc.connectionState !== 'connected') continue;
-      const dc = pc.dataChannels?.[0];
-      if (dc?.readyState === 'open') {
-        dc.send(JSON.stringify({ type: 'emote', emote: type }));
-      }
-    }
+    this._data.networkEvent = type;
+    this._relay(true);
+    setTimeout(() => {
+      this._data.networkEvent = '';
+      this._relay(true);
+    }, 4000);
   }
 
   update(delta) {
     const now = Date.now();
     for (const [id, avatar] of this.players) {
-      if (now - avatar.lastSeenAt > DISCONNECT_TIMEOUT) {
-        this._removeRemotePlayer(id);
+      if (now - (avatar.lastSeenAt || 0) > 3000) {
+        this._removeClient(id);
         continue;
       }
       avatar.update(delta);
@@ -402,54 +412,21 @@ export class MultiplayerSystem {
   get playerCount() { return this.players.size; }
 
   disconnect() {
-    if (this.syncInterval) clearInterval(this.syncInterval);
-    const wsToClose = this.ws;
-    this.ws = null;
-    if (wsToClose) wsToClose.close();
-    for (const pc of this.pcs.values()) pc.close();
-    this.pcs.clear();
+    if (this._updateInterval) clearInterval(this._updateInterval);
+    if (this._pingInterval) clearInterval(this._pingInterval);
+    if (this._relayInterval) clearInterval(this._relayInterval);
+    if (this._retryInterval) clearInterval(this._retryInterval);
+    const socket = this.socket;
+    this.socket = null;
+    if (socket) socket.close();
     for (const avatar of this.players.values()) {
       this.scene.remove(avatar.group);
-      avatar.group.traverse((child) => {
-        if (child.isMesh) {
-          child.geometry.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose());
-          } else {
-            child.material.dispose();
-          }
-        }
-      });
     }
     this.players.clear();
     this.connected = false;
-    this._clearIdentity();
-  }
-
-  _saveIdentity(identity) {
-    try {
-      localStorage.setItem('planetwood_identity', JSON.stringify(identity));
-    } catch (e) {}
-  }
-
-  _loadIdentity() {
-    try {
-      const data = localStorage.getItem('planetwood_identity');
-      return data ? JSON.parse(data) : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  _clearIdentity() {
-    try {
-      localStorage.removeItem('planetwood_identity');
-    } catch (e) {}
   }
 
   _log(...args) {
-    if (import.meta.env?.DEV) {
-      console.log('[Multiplayer]', ...args);
-    }
+    if (import.meta.env?.DEV) console.log('[Multiplayer]', ...args);
   }
 }

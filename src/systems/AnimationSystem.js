@@ -68,7 +68,7 @@ export class AnimationSystem {
     if (hierArr) {
       for (let i = 0; i < boneCount; i++) {
         const parentIdx = hierArr[i];
-        if (parentIdx > 0 && parentIdx - 1 < boneCount) {
+        if (parentIdx > 0 && parentIdx - 1 < boneCount && parentIdx - 1 !== i) {
           bones[parentIdx - 1].add(bones[i]);
         }
       }
@@ -132,11 +132,8 @@ export class AnimationSystem {
     }
 
     const clip = new THREE.AnimationClip('animation', -1, tracks);
-    const mixer = new THREE.AnimationMixer(skeleton.bones[0]?.parent || skeleton.bones[0]);
-
-    for (const bone of skeleton.bones) {
-      mixer._root?.add(bone);
-    }
+    const mixerRoot = skeleton.bones[0]?.parent || skeleton.bones[0];
+    const mixer = new THREE.AnimationMixer(mixerRoot);
 
     return { clip, mixer, frameCount, fps };
   }

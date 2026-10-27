@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+message RealmData {
+  repeated float p = 1;       // position [x, y, z]
+  repeated float r = 2;       // rotation [x, y, z] euler
+  uint32 medium = 3;          // 0=ground, 1=air, 2=water
+  uint32 animation = 4;       // animation state index
+  string bonesFile = 5;       // avatar/bones-file
+  string modelFiles = 6;      // avatar/model-file(s)
+  string animationFiles = 7;  // avatar/animation-file(s)
+  string tag = 8;             // display name
+  string networkEvent = 9;    // emote/interaction event
+}
