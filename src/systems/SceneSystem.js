@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { MaterialSystem } from './MaterialSystem.js';
 
 export class SceneSystem {
   constructor(container) {
@@ -20,6 +24,18 @@ export class SceneSystem {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
+
+    // Bloom post-processing for emissive VFX (waterfall, cables, etc.)
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.5,  // strength
+      0.4,  // radius
+      0.85  // threshold
+    );
+    this.composer.addPass(bloomPass);
+    this.bloomPass = bloomPass;
 
     this.labelRenderer = new CSS2DRenderer();
     this.labelRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -42,6 +58,8 @@ export class SceneSystem {
     this.gltfLoader = new GLTFLoader();
     this.clock = new THREE.Clock();
     this.clock.start();
+
+    this.materialSystem = new MaterialSystem(this.scene);
 
     this._fpsFrames = 0;
     this._fpsTime = 0;
@@ -101,6 +119,7 @@ export class SceneSystem {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
       this.labelRenderer.setSize(window.innerWidth, window.innerHeight);
     });
   }
@@ -108,6 +127,8 @@ export class SceneSystem {
   async loadScene(url) {
     const gltf = await this.gltfLoader.loadAsync(url);
     this.scene.add(gltf.scene);
+    await this.materialSystem.init();
+    this.materialSystem.applyShadersToScene();
     return gltf;
   }
 
@@ -155,10 +176,11 @@ export class SceneSystem {
 
   update() {
     this.controls.update();
+    this.materialSystem.update(this.clock.getDelta());
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
     this.labelRenderer.render(this.scene, this.camera);
   }
 
