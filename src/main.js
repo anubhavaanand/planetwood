@@ -7,6 +7,9 @@ import { NPCSystem } from './systems/NPCSystem.js';
 import { MultiplayerSystem } from './systems/MultiplayerSystem.js';
 import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
+import { QuestSystem } from './systems/QuestSystem.js';
+import { QuestUI } from './systems/QuestUI.js';
+import { DialogueSystem } from './systems/DialogueSystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3005';
@@ -26,6 +29,9 @@ let input = null;
 let multiplayer = null;
 let chatSys = null;
 let ui = null;
+let questUI = null;
+let dialogueSys = null;
+let questSys = null;
 let fallbackTimer = null;
 
 async function init() {
@@ -102,6 +108,21 @@ async function initCore() {
   input = new PlayerInput(sceneSys.camera);
   chatSys = new ChatSystem();
   ui = new UISystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
+  questUI = new QuestUI(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
+  dialogueSys = new DialogueSystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
+  questSys = new QuestSystem(questUI);
+
+  dialogueSys.onStepComplete = (questId, stepId) => {
+    if (questSys) questSys.completeStep(questId, stepId);
+  };
+
+  questUI.onItemReceived = (extraData) => {
+    ui.addNotification(`Received: ${extraData.uiTitle || 'Item'}`);
+    if (extraData.uiText) ui.addNotification(extraData.uiText);
+  };
+  questUI.onQuestCompleted = (questId) => {
+    ui.addNotification('Quest completed!');
+  };
 
   ui.addNameplate(playerAvatar, 'You', true);
 
@@ -134,18 +155,30 @@ async function initCore() {
     }
   };
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !ui.isInputOpen && loadingEl.style.display === 'none') {
-      e.preventDefault();
-      ui.showInput();
-    }
-  });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !ui.isInputOpen && !dialogueSys.active && loadingEl.style.display === 'none') {
+        e.preventDefault();
+        ui.showInput();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (dialogueSys.active) {
+          dialogueSys.advance();
+          return;
+        }
+        _tryInteract();
+      }
+    });
 
   updateLoading('Placing NPCs...', 95);
   npcSys = new NPCSystem(sceneSys.scene, animSys, animData, meshLoader);
   const npcs = await npcSys.loadFromScene(gltf.scene);
   for (const npc of npcs) {
     ui.addNameplate(npc, npc.displayName);
+    if (questSys) questSys.registerNpc(npc);
   }
 
   updateLoading('Connecting...', 98);
@@ -212,6 +245,27 @@ function _setupMultiplayer(animData) {
   }
 }
 
+function _tryInteract() {
+  if (!playerAvatar || !npcSys || dialogueSys.active) return;
+  const playerPos = playerAvatar.group.position;
+  let nearest = null;
+  let nearestDist = 45; // interaction radius
+  for (const npc of npcSys.npcs) {
+    const d = npc.group.position.distanceTo(playerPos);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearest = npc;
+    }
+  }
+  if (!nearest) return;
+  const step = questSys.interact(nearest);
+  if (step) {
+    dialogueSys.open(nearest);
+  } else {
+    ui.addNotification("There's nothing to say right now.");
+  }
+}
+
 function updateLoading(text, percent) {
   if (loadingText) loadingText.textContent = text;
   if (loadingProgress) loadingProgress.style.width = percent + '%';
@@ -229,7 +283,9 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = sceneSys.clock.getDelta();
 
-  if (input) {
+  const dialogueActive = dialogueSys && dialogueSys.active;
+
+  if (input && !dialogueActive) {
     const result = input.update(delta);
     if (playerAvatar) {
       playerAvatar.group.position.add(result.movement);

@@ -68,6 +68,12 @@ export class PlayerInput {
     return triggered;
   }
 
+  isInteractTriggered() {
+    const triggered = this.keys['KeyE'];
+    if (triggered) this.keys['KeyE'] = false;
+    return triggered;
+  }
+
   dispose() {
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
