@@ -22,6 +22,8 @@ export class QuestSystem {
           id: s.id,
           npc: s.npc,
           ordered: s.ordered,
+          texts: s.texts,
+          extraData: s.extraData,
           completed: false,
         })),
       });
