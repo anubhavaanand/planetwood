@@ -280,7 +280,7 @@ export class MultiplayerSystem {
     this.players.set(id, avatar);
 
     if (skinEntry) {
-      const { bones, skeleton } = this.animSys.createSkin(skinEntry);
+      const { bones, skeleton } = this.animSys.createSkin(skinEntry, 'avatar');
       const mat = new THREE.MeshStandardMaterial({ color, skinning: true, roughness: 0.6, metalness: 0.1 });
 
       const setupAnimations = () => {

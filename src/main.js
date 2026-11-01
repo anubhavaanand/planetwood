@@ -71,7 +71,7 @@ async function initCore() {
 
   const avatarBones = animSys.findAvatarBones(animData);
   if (avatarBones) {
-    const { bones, skeleton } = animSys.createSkin(avatarBones);
+    const { bones, skeleton } = animSys.createSkin(avatarBones, 'avatar');
     const avatarMat = new THREE.MeshStandardMaterial({ color: 0x4488cc, skinning: true, roughness: 0.6, metalness: 0.1 });
     try {
       const avatarMesh = await meshLoader.createSkinnedMesh('./assets/avatar/accessories/base.glb', skeleton, avatarMat);

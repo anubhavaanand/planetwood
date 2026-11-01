@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export class AnimationSystem {
   constructor() {
     this._skeletonCache = new Map();
+    this._clipCache = new Map();
   }
 
   findSkinEntry(animData, npcType) {
@@ -80,7 +81,15 @@ export class AnimationSystem {
     return result;
   }
 
-  createSkinAnimation(animData, skeleton) {
+  createSkinAnimation(animData, skeleton, cacheKey) {
+    if (cacheKey && this._clipCache.has(cacheKey)) {
+      const { clip } = this._clipCache.get(cacheKey);
+      // Return a fresh mixer for this instance but reuse the clip
+      const mixerRoot = skeleton.bones[0]?.parent || skeleton.bones[0];
+      const mixer = new THREE.AnimationMixer(mixerRoot);
+      return { clip, mixer, frameCount: clip.duration * (animData.info?.fps || 30), fps: animData.info?.fps || 30 };
+    }
+
     const attr = animData.attributes;
     const userData = animData.info?.userData;
     const boneCount = animData.info?.boneCount || Math.floor(animData.vertices / (userData?.frames || 1));
@@ -134,6 +143,10 @@ export class AnimationSystem {
     const clip = new THREE.AnimationClip('animation', -1, tracks);
     const mixerRoot = skeleton.bones[0]?.parent || skeleton.bones[0];
     const mixer = new THREE.AnimationMixer(mixerRoot);
+
+    if (cacheKey) {
+      this._clipCache.set(cacheKey, { clip, mixer });
+    }
 
     return { clip, mixer, frameCount, fps };
   }

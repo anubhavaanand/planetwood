@@ -46,7 +46,7 @@ export class NPCSystem {
 
     const animEntry = this.animationSystem.findAnimEntry(this.animData, data.npcType, 'idle');
     if (animEntry && npc.skeleton) {
-      const { clip } = this.animationSystem.createSkinAnimation(animEntry, npc.skeleton);
+      const { clip } = this.animationSystem.createSkinAnimation(animEntry, npc.skeleton, `${data.npcType}-idle`);
       npc.addAnimation('idle', clip);
       npc.playAnimation('idle');
     }
