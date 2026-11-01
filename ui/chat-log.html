@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood Chat Log</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: rgba(40, 52, 54, 0.95);
+      --lighter-surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --panel-radius: 8px;
+      --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --backdrop-blur: blur(8px);
+      --panel-width: 320px;
+      --panel-height: 240px;
+      --panel-offset: 16px;
+      --focus-outline-color: #4e8c6d;
+      --focus-outline-width: 2px;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
+    }
+
+    .chat-log-wrapper {
+      position: fixed;
+      bottom: var(--panel-offset);
+      left: var(--panel-offset);
+      z-index: 200;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .chat-log-toggle {
+      width: 48px;
+      height: 48px;
+      background: var(--lighter-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--panel-radius);
+      color: var(--white-text);
+      font-size: 24px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 0.15s ease-out;
+      pointer-events: auto;
+      position: relative;
+      isolation: isolate;
+    }
+
+    .chat-log-toggle:hover {
+      background: var(--accent-hover);
+    }
+    
+    .chat-log-toggle:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+
+    .chat-log-panel {
+      width: var(--panel-width);
+      max-height: var(--panel-height);
+      background: var(--dark-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--panel-radius);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+
+      transform: translateY(110%);
+      opacity: 0;
+      visibility: hidden;
+      transition: transform 0.2s ease-out, opacity 0.2s ease-out, visibility 0.2s;
+
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      isolation: isolate;
+      position: relative;
+    }
+
+    .chat-log-panel.is-open {
+      transform: translateY(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .chat-log-panel:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+
+    .chat-log-entries {
+      flex-grow: 1;
+      padding: 8px 14px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: var(--muted-text) transparent;
+      pointer-events: auto;
+    }
+    .chat-log-entries::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-log-entries::-webkit-scrollbar-thumb {
+      background-color: var(--muted-text);
+      border-radius: 999px;
+    }
+    .chat-log-entries::-webkit-scrollbar-track {
+      background-color: transparent;
+    }
+
+    .chat-log-entry {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-color);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    .chat-log-entry:first-child {
+      border-top: none;
+    }
+    .chat-log-entry:last-child {
+      border-bottom: none;
+    }
+    .chat-log-entry.is-new {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .chat-log-entry .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+
+    .chat-log-entry .name {
+      color: var(--primary-green);
+      font-weight: bold;
+      font-size: 12px;
+      margin-right: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+    }
+
+    .chat-log-entry .timestamp {
+      color: var(--muted-text);
+      font-size: 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .chat-log-entry .text {
+      color: var(--white-text);
+      font-size: 14px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .chat-log-empty {
+      color: var(--muted-text);
+      font-size: 14px;
+      text-align: center;
+      padding: 20px;
+      user-select: none;
+      pointer-events: none;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chat-log-panel, .chat-log-entry {
+        transition: none !important;
+      }
+      .chat-log-panel.is-open {
+        transform: translateY(0);
+      }
+      .chat-log-entry.is-new {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .chat-log-wrapper {
+        left: 0;
+        right: 0;
+        bottom: var(--panel-offset);
+        align-items: center;
+      }
+      .chat-log-panel {
+        width: calc(100% - (2 * var(--panel-offset)));
+        left: var(--panel-offset);
+        transform: translateY(110%);
+      }
+      .chat-log-panel.is-open {
+        left: var(--panel-offset);
+        right: var(--panel-offset);
+        transform: translateY(0);
+      }
+      .chat-log-toggle {
+        margin-left: 0;
+      }
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="chat-log-wrapper">
+    <button type="button" class="chat-log-toggle" aria-label="Toggle chat history" aria-expanded="false" aria-controls="chat-log-panel">💬</button>
+
+    <div id="chat-log-panel" class="chat-log-panel" role="dialog" aria-modal="false" aria-label="Chat history">
+      <div class="sr-only" id="sr-chat-announcements" aria-live="polite"></div>
+      <div class="chat-log-entries" role="log" aria-label="Chat messages history" tabindex="-1">
+        <div class="chat-log-empty">No messages yet</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const chatLogPanel = document.getElementById('chat-log-panel');
+      const chatLogToggle = document.querySelector('.chat-log-toggle');
+      const chatLogEntries = chatLogPanel.querySelector('.chat-log-entries');
+      const chatLogEmpty = chatLogPanel.querySelector('.chat-log-empty');
+      const srAnnouncements = document.getElementById('sr-chat-announcements');
+
+      let isOpen = false;
+      const MAX_MESSAGES = 50;
+      let messagesCount = 0;
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(text));
+        return div.innerHTML;
+      }
+
+      let lastFocusedElement = null;
+      function trapFocus() {
+        document.addEventListener('keydown', handleFocusKeydown);
+      }
+
+      function handleFocusKeydown(e) {
+        if (e.key === 'Tab') {
+          const focusableEls = chatLogPanel.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          const firstFocusableEl = focusableEls.length > 0 ? focusableEls[0] : null;
+          const lastFocusableEl = focusableEls.length > 0 ? focusableEls[focusableEls.length - 1] : null;
+
+          if (!firstFocusableEl || !lastFocusableEl) return;
+
+          if (e.shiftKey) {
+            if (document.activeElement === firstFocusableEl || document.activeElement === chatLogPanel) {
+              lastFocusableEl.focus();
+              e.preventDefault();
+            }
+          } else {
+            if (document.activeElement === lastFocusableEl) {
+              firstFocusableEl.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      }
+
+      function removeFocusTrap() {
+        document.removeEventListener('keydown', handleFocusKeydown);
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        } else {
+          chatLogToggle.focus();
+        }
+      }
+
+      window.ChatLog = {
+        add: function({ name, text, timestamp }) {
+          const entry = document.createElement('div');
+          entry.classList.add('chat-log-entry');
+
+          const header = document.createElement('div');
+          header.classList.add('header');
+
+          const nameSpan = document.createElement('span');
+          nameSpan.classList.add('name');
+          nameSpan.textContent = escapeHtml(name);
+          header.appendChild(nameSpan);
+
+          const timestampSpan = document.createElement('span');
+          timestampSpan.classList.add('timestamp');
+          timestampSpan.textContent = escapeHtml(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          header.appendChild(timestampSpan);
+
+          const textP = document.createElement('p');
+          textP.classList.add('text');
+          textP.textContent = escapeHtml(text);
+
+          entry.appendChild(header);
+          entry.appendChild(textP);
+
+          if (messagesCount >= MAX_MESSAGES) {
+            chatLogEntries.removeChild(chatLogEntries.firstElementChild);
+          } else {
+            messagesCount++;
+          }
+
+          chatLogEntries.appendChild(entry);
+          chatLogEmpty.style.display = 'none';
+
+          requestAnimationFrame(() => {
+            entry.classList.add('is-new');
+          });
+
+          setTimeout(() => {
+            chatLogEntries.scrollTop = chatLogEntries.scrollHeight;
+          }, 0);
+
+          srAnnouncements.textContent = `New message from ${escapeHtml(name)}: ${escapeHtml(text.substring(0, 120))}`;
+          setTimeout(() => srAnnouncements.textContent = '', 100);
+        },
+
+        toggle: function() {
+          isOpen = !isOpen;
+          if (isOpen) {
+            lastFocusedElement = document.activeElement;
+            chatLogPanel.classList.add('is-open');
+            chatLogToggle.setAttribute('aria-expanded', 'true');
+            chatLogPanel.setAttribute('aria-modal', 'true');
+            chatLogEntries.setAttribute('tabindex', '0');
+            chatLogPanel.addEventListener('transitionend', () => {
+              if (isOpen) trapFocus();
+            }, { once: true });
+          } else {
+            chatLogPanel.classList.remove('is-open');
+            chatLogToggle.setAttribute('aria-expanded', 'false');
+            chatLogPanel.setAttribute('aria-modal', 'false');
+            chatLogEntries.setAttribute('tabindex', '-1');
+            removeFocusTrap();
+          }
+        },
+
+        get isOpen() {
+          return isOpen;
+        },
+
+        clear: function() {
+          chatLogEntries.innerHTML = '';
+          chatLogEntries.appendChild(chatLogEmpty);
+          chatLogEmpty.style.display = 'flex';
+          messagesCount = 0;
+        }
+      };
+
+      chatLogToggle.addEventListener('click', window.ChatLog.toggle);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isOpen) {
+          e.preventDefault();
+          window.ChatLog.toggle();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (isOpen && !chatLogPanel.contains(e.target) && !chatLogToggle.contains(e.target)) {
+          window.ChatLog.toggle();
+        }
+      });
+
+      if (messagesCount > 0) {
+        chatLogEmpty.style.display = 'none';
+      }
+
+      chatLogPanel.addEventListener('transitionend', () => {
+        if (isOpen) {
+          chatLogEntries.focus();
+        }
+      });
+
+      chatLogEntries.setAttribute('tabindex', '-1');
+    })();
+  </script>
+</body>
+</html>

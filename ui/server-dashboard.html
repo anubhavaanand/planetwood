@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetwood Server Dashboard</title>
+    <style>
+        /* Planetwood Admin Variant Brand Tokens */
+        :root {
+            --primary-green: #4e8c6d;
+            --dark-bg: #1a1a1a;
+            --surface: #2a2a2a;
+            --surface-alt: #333333;
+            --white-text: #ffffff;
+            --muted-text: #888888;
+            --accent-hover: #5da37d;
+            --border-color: #444;
+            --error-red: #e74c3c;
+            --warning-amber: #f39c12;
+            --success-green: #2ecc71;
+            --info-blue: #3498db;
+            --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            --font-body: system-ui, -apple-system, sans-serif;
+        }
+        
+        /* Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-body);
+            background-color: var(--dark-bg);
+            color: var(--white-text);
+            line-height: 1.6;
+        }
+        
+        /* Skip Link */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--primary-green);
+            color: var(--white-text);
+            padding: 8px 16px;
+            z-index: 1000;
+            transition: top 0.3s;
+        }
+        
+        .skip-link:focus {
+            top: 0;
+        }
+        
+        /* Container */
+        .container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header */
+        header {
+            padding: 1rem;
+            background-color: var(--surface);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .header-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-green);
+        }
+        
+        /* Connection Status Bar */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        
+        .status-connected {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: var(--success-green);
+            border: 1px solid var(--success-green);
+        }
+        
+        .status-disconnected {
+            background-color: rgba(231, 76, 60, 0.2);
+            color: var(--error-red);
+            border: 1px solid var(--error-red);
+        }
+        
+        .status-connecting {
+            background-color: rgba(243, 156, 18, 0.2);
+            color: var(--warning-amber);
+            border: 1px solid var(--warning-amber);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-connected .status-dot {
+            background-color: var(--success-green);
+        }
+        
+        .status-disconnected .status-dot {
+            background-color: var(--error-red);
+        }
+        
+        .status-connecting .status-dot {
+            background-color: var(--warning-amber);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .session-id {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        
+        .reconnect-btn {
+            background-color: var(--surface-alt);
+            color: var(--white-text);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .reconnect-btn:hover {
+            background-color: var(--primary-green);
+            border-color: var(--primary-green);
+        }
+        
+        .connect-form {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .connect-form input {
+            background-color: var(--surface-alt);
+            border: 1px solid var(--border-color);
+            color: var(--white-text);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            width: 120px;
+        }
+        
+        .connect-form input:focus {
+            outline: none;
+            border-color: var(--primary-green);
+        }
+        
+        .connect-btn {
+            background-color: var(--primary-green);
+            color: var(--white-text);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+        
+        .connect-btn:hover {
+            background-color: #3a6f52;
+        }
+        
+        .latency {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        
+        /* Main Content */
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            padding: 1rem;
+            overflow-y: auto;
+        }
+        
+        /* Player Overview Cards */
+        .overview-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .card {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        
+        .card-label {
+            font-size: 0.9rem;
+            color: var(--muted-text);
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            font-family: var(--font-mono);
+        }
+        
+        .card-value.subtext {
+            font-size: 0.9rem;
+            font-weight: normal;
+        }
+        
+        .sparkline {
+            height: 20px;
+            margin-top: 0.5rem;
+        }
+        
+        /* Player Table */
+        .table-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        
+        .table-header {
+            display: flex;
+            background-color: var(--surface-alt);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .table-header th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        
+        .table-header th:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .table-header th.sort-asc::after {
+            content: "▲";
+            font-size: 0.7em;
+            margin-left: 0.25em;
+        }
+        
+        .table-header th.sort-desc::after {
+            content: "▼";
+            font-size: 0.7em;
+            margin-left: 0.25em;
+        }
+        
+        .table-body {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .table-row {
+            display: flex;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .table-row:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .table-row:last-child {
+            border-bottom: none;
+        }
+        
+        .table-cell {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        
+        .table-cell.status-online {
+            color: var(--success-green);
+        }
+        
+        .table-cell.status-away {
+            color: var(--warning-amber);
+        }
+        
+        .table-cell.status-disconnected {
+            color: var(--error-red);
+        }
+        
+        .table-cell.latency-good {
+            color: var(--success-green);
+        }
+        
+        .table-cell.latency-warning {
+            color: var(--warning-amber);
+        }
+        
+        .table-cell.latency-error {
+            color: var(--error-red);
+        }
+        
+        .actions-cell {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+        }
+        
+        .btn-action {
+            background-color: var(--surface-alt);
+            border: 1px solid var(--border-color);
+            color: var(--white-text);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        
+        .btn-action:hover {
+            background-color: var(--primary-green);
+            border-color: var(--primary-green);
+        }
+        
+        .btn-action.kick {
+            border-color: var(--error-red);
+            color: var(--error-red);
+        }
+        
+        .btn-action.kick:hover {
+            background-color: var(--error-red);
+            color: var(--white-text);
+        }
+        
+        .btn-action.message {
+            border-color: var(--primary-green);
+            color: var(--primary-green);
+        }
+        
+        .btn-action.message:hover {
+            background-color: var(--primary-green);
+            color: var(--white-text);
+        }
+        
+        /* Event Log */
+        .event-log-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .event-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: var(--surface-alt);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .event-log-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .event-log-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .event-log-filter {
+            background-color: var(--surface-alt);
+            border: 1px solid var(--border-color);
+            color: var(--white-text);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .event-log-filter:focus {
+            outline: none;
+            border-color: var(--primary-green);
+        }
+        
+        .event-log-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+        
+        .event-entry {
+            padding: 0.5rem 0;
+            border-left: 3px solid transparent;
+            margin-bottom: 0.5rem;
+        }
+        
+        .event-entry.error {
+            border-left-color: var(--error-red);
+            background-color: rgba(231, 76, 60, 0.1);
+        }
+        
+        .event-entry.join {
+            border-left-color: var(--success-green);
+        }
+        
+        .event-entry.leave {
+            border-left-color: var(--error-red);
+        }
+        
+        .event-entry.chat {
+            border-left-color: var(--info-blue);
+        }
+        
+        .event-entry.sync {
+            border-left-color: var(--primary-green);
+        }
+        
+        .event-log-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background-color: var(--surface-alt);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Performance Charts */
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .chart-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chart-canvas {
+            width: 100%;
+            height: 200px;
+            background-color: var(--surface-alt);
+            border-radius: 4px;
+        }
+        
+        .chart-data-table {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+        }
+        
+        .chart-data-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .chart-data-table th,
+        .chart-data-table td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        /* Server Controls */
+        .controls-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .controls-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .controls-section:last-child {
+            margin-bottom: 0;
+        }
+        
+        .controls-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .control-group input,
+        .control-group select {
+            background-color: var(--surface-alt);
+            border: 1px solid var(--border-color);
+            color: var(--white-text);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            min-width: 150px;
+        }
+        
+        .control-group input:focus,
+        .control-group select:focus {
+            outline: none;
+            border-color: var(--primary-green);
+        }
+        
+        .control-btn {
+            background-color: var(--primary-green);
+            color: var(--white-text);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+        
+        .control-btn:hover {
+            background-color: #3a6f52;
+        }
+        
+        .control-btn.danger {
+            background-color: var(--error-red);
+        }
+        
+        .control-btn.danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .control-btn.warning {
+            background-color: var(--warning-amber);
+        }
+        
+        .control-btn.warning:hover {
+            background-color: #d35400;
+        }
+        
+        /* Session Details Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .modal-content {
+            background-color: var(--surface);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--white-text);
+            font-size: 1.5rem;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-close:hover {
+            color: var(--primary-green);
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .modal-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .modal-section:last-child {
+            margin-bottom: 0;
+        }
+        
+        .modal-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .modal-content-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+        
+        .modal-content-table th,
+        .modal-content-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+        
+        .modal-content-table th {
+            background-color: var(--surface-alt);
+            font-weight: 600;
+        }
+        
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            main {
+                flex-direction: column;
+            }
+            
+            .charts-container,
+            .controls-container {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .overview-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .table-container {
+                display: block;
+                overflow-x: auto;
+            }
+            
+            .table-body {
+                max-height: none;
+            }
+            
+            .table-row {
+                display: block;
+                border-bottom: 1px solid var(--border-color);
+                padding: 1rem 0;
+            }
+            
+            .table-cell {
+                display: block;
+                width: 100%;
+                margin-bottom: 0.5rem;
+                padding-left: 50%;
+                position: relative;
+                white-space: normal;
+            }
+            
+            .table-cell::before {
+                content: attr(data-label);
+                position: absolute;
+                left: 0;
+                width: 50%;
+                padding-left: 1rem;
+                font-weight: 600;
+                color: var(--muted-text);
+            }
+            
+            .table-cell:last-child {
+                margin-bottom: 0;
+            }
+            
+            .actions-cell {
+                justify-content: flex-start;
+            }
+        }
+        
+        /* Reduce Motion */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            
+            .status-connecting {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
+    <header>
+        <div class="header-left">
+            <h1 class="header-title">Planetwood Server Dashboard</h1>
+            <div class="connection-status">
+                <div class="status-indicator status-disconnected" id="status-indicator">
+                    <div class="status-dot"></div>
+                    <span>Disconnected</span>
+                </div>
+                <div class="session-id" id="session-id">Session ID: — </div>
+                <button class="reconnect-btn" id="reconnect-btn">Reconnect</button>
+            </div>
+            
+            <div class="connect-form">
+                <input type="text" id="ws-host" placeholder="localhost:3001" value="localhost:3001">
+                <input type="password" id="ws-token" placeholder="Auth Token" value="planetwood-admin">
+                <button class="connect-btn" id="connect-btn">Connect</button>
+            </div>
+            
+            <div class="latency" id="latency-display">Latency: — </div>
+        </div>
+    </header>
+    
+    <main id="main-content">
+        <!-- Player Overview Cards -->
+        <section class="overview-cards">
+            <div class="card">
+                <div class="card-label">Active Players</div>
+                <div class="card-value" id="active-players">0 / 0</div>
+                <div class="card-value subtext" id="max-players"></div>
+                <canvas class="sparkline" id="player-count-sparkline"></canvas>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Total Sessions</div>
+                <div class="card-value" id="total-sessions">0</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Peak Concurrent</div>
+                <div class="card-value" id="peak-concurrent">0</div>
+            </div>
+            
+            <div class="card">
+                <div class="card-label">Uptime</div>
+                <div class="card-value" id="uptime-display">00:00:00</div>
+            </div>
+        </section>
+        
+        <!-- Player Table -->
+        <section class="table-container">
+            <div class="table-header">
+                <div class="table-cell" data-label="#">#</div>
+                <div class="table-cell" data-label="Player ID">Player ID</div>
+                <div class="table-cell" data-label="Name">Name</div>
+                <div class="table-cell" data-label="IP">IP</div>
+                <div class="table-cell" data-label="Status">Status</div>
+                <div class="table-cell" data-label="Latency">Latency</div>
+                <div class="table-cell" data-label="Anim State">Anim State</div>
+                <div class="table-cell" data-label="Position">Position (x,y,z)</div>
+                <div class="table-cell" data-label="Connected Since">Connected Since</div>
+                <div class="table-cell" data-label="Actions">Actions</div>
+            </div>
+            <div class="table-body" id="player-table-body">
+                <!-- Player rows will be injected here -->
+                <div class="table-row">
+                    <div class="table-cell" colspan="9" style="text-align: center; color: var(--muted-text);">
+                        No players connected
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Live Event Log -->
+        <section class="event-log-container">
+            <div class="event-log-header">
+                <div class="event-log-title">Live Event Log</div>
+                <div class="event-log-controls">
+                    <select class="event-log-filter" id="event-filter">
+                        <option value="all">All Events</option>
+                        <option value="join">Joins</option>
+                        <option value="leave">Leaves</option>
+                        <option value="chat">Chat</option>
+                        <option value="sync">Sync</option>
+                        <option value="error">Errors</option>
+                    </select>
+                    <button class="btn-action" id="clear-log-btn">Clear Log</button>
+                    <button class="btn-action" id="export-log-btn">Export Log</button>
+                </div>
+            </div>
+            <div class="event-log-body" id="event-log-body" role="log" aria-live="polite" aria-label="Server event log">
+                <!-- Event entries will be injected here -->
+                <div class="event streaming WebSocket (newest first)</div>
+            </div>
+            <div class="event-log-footer">
+                <span id="event-log-status">Events: 0</span>
+                <button class="btn-action" id="pause-log-toggle">Pause</button>
+            </div>
+        </section>
+        
+        <!-- Performance Charts -->
+        <section class="charts-container">
+            <!-- Player Count Over Time -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <span>Player Count Over Time</span>
+                    <span id="player-count-peak-label">Peak: 0</span>
+                </div>
+                <canvas class="chart-canvas" id="player-count-chart"></canvas>
+                <div class="chart-data-table" id="player-count-table">
+                    <!-- Data table will be inserted here -->
+                </div>
+            </div>
+            
+            <!-- Message Rate -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <span>Message Rate</span>
+                    <span id="message-rate-peak-label">Peak: 0 msg/s</span>
+                </div>
+                <canvas class="chart-canvas" id="message-rate-chart"></canvas>
+                <div class="chart-data-table" id="message-rate-table">
+                    <!-- Data table will be inserted here -->
+                </div>
+            </div>
+            
+            <!-- Latency Distribution -->
+            <div class="chart-container">
+                <div class="chart-title">
+                    <span>Latency Distribution</span>
+                    <span id="latency-dist-total">0 players</span>
+                </div>
+                <canvas class="chart-canvas" id="latency-dist-chart"></canvas>
+                <div class="chart-data-table" id="latency-dist-table">
+                    <!-- Data table will be inserted here -->
+                </div>
+            </div>
+        </section>
+        
+        <!-- Server Controls -->
+        <section class="controls-container">
+            <!-- Broadcast Message -->
+            <div class="controls-section">
+                <div class="controls-section-title">
+                    Broadcast Message
+                </div>
+                <div class="control-group">
+                    <input type="text" id="broadcast-message" placeholder="Enter message to broadcast">
+                    <select id="broadcast-type">
+                        <option value="system">System</option>
+                        <option value="announcement">Announcement</option>
+                        <option value="alert">Alert</option>
+                    </select>
+                    <button class="control-btn" id="send-broadcast-btn">Send to All</button>
+                </div>
+            </div>
+            
+            <!-- Kick Player -->
+            <div class="controls-section">
+                <div class="controls-section-title">
+                    Kick Player
+                </div>
+                <div class="control-group">
+                    <select id="kick-player-select">
+                        <option value="">Select player to kick</option>
+                    </select>
+                    <button class="control-btn danger" id="kick-player-btn">Kick Player</button>
+                </div>
+            </div>
+            
+            <!-- Server Command -->
+            <div class="controls-section">
+                <div class="controls-section-title">
+                    Server Command
+                </div>
+                <div class="control-group">
+                    <input type="text" id="server-command" placeholder="Enter admin command">
+                    <button class="control-btn" id="send-command-btn">Send Command</button>
+                </div>
+            </div>
+            
+            <!-- Restart Signaling -->
+            <div class="controls-section">
+                <div class="controls-section-title">
+                    Server Control
+                </div>
+                <button class="control-btn danger" id="restart-relay-btn">Restart Relay</button>
+                <button class="control-btn" id="log-level-btn" data-log-level="info">Log Level: Info</button>
+            </div>
+        </section>
+    </main>
+    
+    <!-- Session Details Modal -->
+    <div class="modal-overlay" id="session-details-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <div class="modal-title-icon">👤</div>
+                    <span>Player Details</span>
+                </div>
+                <button class="modal-close" id="close-modal-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <div class="modal-section-icon">🆔</div>
+                        <span>Player Information</span>
+                    </div>
+                    <table class="modal-content-table">
+                        <tr>
+                            <th>Name:</th>
+                            <td id="modal-player-name">—</td>
+                        </tr>
+                        <tr>
+                            <th>Player ID:</th>
+                            <td id="modal-player-id">—</td>
+                        </tr>
+                        <tr>
+                            <th>IP Address:</th>
+                            <td id="modal-player-ip">—</td>
+                        </tr>
+                        <tr>
+                            <th>Connection Time:</th>
+                            <td id="modal-connection-time">—</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td id="modal-player-status">—</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <div class="modal-section-icon">📊</div>
+                        <span>Latency History</span>
+                    </div>
+                    <canvas class="sparkline" id="modal-latency-sparkline"></canvas>
+                    <div id="modal-latency-current">Current: — ms</div>
+                </div>
+                
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <div class="modal-section-icon">📍</div>
+                        <span>Position History</span>
+                    </div>
+                    <canvas class="chart-canvas" id="modal-position-map" height="100"></canvas>
+                </div>
+                
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <div class="modal-section-icon">💬</div>
+                        <span>Chat History</span>
+                    </div>
+                    <div id="modal-chat-history" style="max-height: 150px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.85rem; background-color: var(--surface-alt); padding: 1rem; border-radius: 4px;">
+                        No chat history
+                    </div>
+                </div>
+                
+                <div class="modal-section">
+                    <div class="modal-section-title">
+                        <div class="modal-section-icon">🎭</div>
+                        <span>Animation State</span>
+                    </div>
+                    <div id="modal-animation-state">—</div>
+                    <div id="modal-animation-clip">—</div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="control-btn" id="modal-message-btn">Message Player</button>
+                    <button class="control-btn danger" id="modal-kick-btn">Kick Player</button>
+                    <button class="control-btn" id="modal-view-logs-btn">View Logs</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Dashboard Logic
+        class Player {
+            constructor(data) {
+                this.id = data.id || '';
+                this.name = data.name || 'Unknown';
+                this.ip = data.ip || '0.0.0.0';
+                this.status = data.status || 'disconnected'; // online, away, disconnected
+                this.latency = data.latency || 0;
+                this.animState = data.animState || 'idle_00';
+                this.position = data.position || {x: 0, y: 0, z: 0};
+                this.connectedSince = data.connectedSince || new Date();
+                
+                // History arrays for charts and details
+                this.latencyHistory = [];
+                this.positionHistory = [];
+                this.chatHistory = [];
+            }
+            
+            update(data) {
+                // Update only the fields that are provided
+                if (data.name !== undefined) this.name = data.name;
+                if (data.ip !== undefined) this.ip = data.ip;
+                if (data.status !== undefined) this.status = data.status;
+                if (data.latency !== undefined) {
+                    this.latency = data.latency;
+                    this.latencyHistory.push({time: Date.now(), latency: data.latency});
+                    // Keep only last 60 entries for sparkline
+                    if (this.latencyHistory.length > 60) this.latencyHistory.shift();
+                }
+                if (data.animState !== undefined) this.animState = data.animState;
+                if (data.position !== undefined) {
+                    this.position = data.position;
+                    this.positionHistory.push({time: Date.now(), position: {...data.position}});
+                    // Keep only last 10 entries for position trail
+                    if (this.positionHistory.length > 10) this.positionHistory.shift();
+                }
+                if (data.connectedSince !== undefined) this.connectedSince = new Date(data.connectedSince);
+                if (data.chatMessage !== undefined) {
+                    this.chatHistory.push({
+                        time: Date.now(),
+                        message: data.chatMessage,
+                        fromSelf: data.fromSelf || false
+                    });
+                    // Keep only last 20 messages
+                    if (this.chatHistory.length > 20) this.chatHistory.shift();
+                }
+            }
+            
+            getStatusColor() {
+                switch (this.status) {
+                    case 'online': return 'var(--success-green)';
+                    case 'away': return 'var(--warning-amber)';
+                    case 'disconnected': return 'var(--error-red)';
+                    default: return 'var(--muted-text)';
+                }
+            }
+            
+            getLatencyColor() {
+                if (this.latency < 100) return 'var(--success-green)';
+                if (this.latency < 300) return 'var(--warning-amber)';
+                return 'var(--error-red)';
+            }
+            
+            getStatusText() {
+                switch (this.status) {
+                    case 'online': return 'Online';
+                    case 'away': return `Away (${Math.floor(Date.now() - this.lastActivity || 0)/1000}s)`;
+                    case 'disconnected': return 'Disconnected';
+                    default: return 'Unknown';
+                }
+            }
+        }
+        
+        class Dashboard {
+            constructor() {
+                this.ws = null;
+                this.reconnectAttempts = 0;
+                this.maxReconnectDelay = 30000; // 30 seconds
+                this.baseReconnectDelay = 1000; // 1 second
+                this.players = new Map();
+                this.sessions = {};
+                this.uptimeStart = null;
+                this.totalSessions = 0;
+                this.peakConcurrent = 0;
+                this.eventLog = [];
+                this.pausedEventLog = false;
+                
+                // Chart data
+                this.playerCountHistory = []; // {time, count}
+                this.messageRateHistory = []; // {time, sync, chat, system}
+                this.latencyDistribution = {
+                    '<50ms': 0,
+                    '50-100ms': 0,
+                    '100-200ms': 0,
+                    '200-500ms': 0,
+                    '>500ms': 0
+                };
+                
+                // DOM Elements
+                this.statusIndicator = document.getElementById('status-indicator');
+                this.sessionIdDisplay = document.getElementById('session-id');
+                this.reconnectBtn = document.getElementById('reconnect-btn');
+                this.connectBtn = document.getElementById('connect-btn');
+                this.wsHostInput = document.getElementById('ws-host');
+                this.wsTokenInput = document.getElementById('ws-token');
+                this.latencyDisplay = document.getElementById('latency-display');
+                this.activePlayersDisplay = document.getElementById('active-players');
+                this.maxPlayersDisplay = document.getElementById('max-players');
+                this.totalSessionsDisplay = document.getElementById('total-sessions');
+                this.peakConcurrentDisplay = document.getElementById('peak-concurrent');
+                this.uptimeDisplay = document.getElementById('uptime-display');
+                this.playerTableBody = document.getElementById('player-table-body');
+                this.eventLogBody = document.getElementById('event-log-body');
+                this.eventFilter = document.getElementById('event-filter');
+                this.clearLogBtn = document.getElementById('clear-log-btn');
+                this.exportLogBtn = document.getElementById('export-log-btn');
+                this.pauseLogToggle = document.getElementById('pause-log-toggle');
+                this.playerCountSparklineCanvas = document.getElementById('player-count-sparkline');
+                this.playerCountChartCanvas = document.getElementById('player-count-chart');
+                this.playerCountPeakLabel = document.getElementById('player-count-peak-label');
+                this.messageRateChartCanvas = document.getElementById('message-rate-chart');
+                this.messageRatePeakLabel = document.getElementById('message-rate-peak-label');
+                this.latencyDistChartCanvas = document.getElementById('latency-dist-chart');
+                this.latencyDistTotal = document.getElementById('latency-dist-total');
+                this.broadcastMessageInput = document.getElementById('broadcast-message');
+                this.broadcastTypeSelect = document.getElementById('broadcast-type');
+                this.sendBroadcastBtn = document.getElementById('send-broadcast-btn');
+                this.kickPlayerSelect = document.getElementById('kick-player-select');
+                this.kickPlayerBtn = document.getElementById('kick-player-btn');
+                this.serverCommandInput = document.getElementById('server-command');
+                this.sendCommandBtn = document.getElementById('send-command-btn');
+                this.restartRelayBtn = document.getElementById('restart-relay-btn');
+                this.logLevelBtn = document.getElementById('log-level-btn');
+                this.sessionDetailsModal = document.getElementById('session-details-modal');
+                this.closeModalBtn = document.getElementById('close-modal-btn');
+                this.modalPlayerName = document.getElementById('modal-player-name');
+                this.modalPlayerId = document.getElementById('modal-player-id');
+                this.modalPlayerIp = document.getElementById('modal-player-ip');
+                this.modalConnectionTime = document.getElementById('modal-connection-time');
+                this.modalPlayerStatus = document.getElementById('modal-player-status');
+                this.modalLatencySparkline = document.getElementById('modal-latency-sparkline');
+                this.modalLatencyCurrent = document.getElementById('modal-latency-current');
+                this.modalPositionMap = document.getElementById('modal-position-map');
+                this.modalChatHistory = document.getElementById('modal-chat-history');
+                this.modalAnimationState = document.getElementById('modal-animation-state');
+                this.modalAnimationClip = document.getElementById('modal-animation-clip');
+                this.modalMessageBtn = document.getElementById('modal-message-btn');
+                this.modalKickBtn = document.getElementById('modal-kick-btn');
+                this.modalViewLogsBtn = document.getElementById('modal-view-logs-btn');
+                
+                // Bind event listeners
+                this.bindEvents();
+                
+                // Initialize
+                this.init();
+            }
+            
+            init() {
+                // Set initial state
+                this.updateStatusDisplay('disconnected');
+                this.updateSessionIdDisplay('—');
+                this.updateLatencyDisplay('—');
+                this.updatePlayerCountDisplay(0, 0);
+                this.updateTotalSessionsDisplay(0);
+                this.updatePeakConcurrentDisplay(0);
+                this.updateUptimeDisplay(0);
+                this.updateEventLogStatus(0);
+                
+                // Try to connect automatically
+                this.connect();
+                
+                // Start uptime timer
+                this.startUptimeTimer();
+                
+                // Start chart updates
+                this.startChartUpdates();
+            }
+            
+            bindEvents() {
+                // Connection controls
+                this.reconnectBtn.addEventListener('click', () => this.connect());
+                this.connectBtn.addEventListener('click', () => this.connect());
+                
+                // Event log controls
+                this.eventFilter.addEventListener('change', () => this.filterEventLog());
+                this.clearLogBtn.addEventListener('click', () => this.clearEventLog());
+                this.exportLogBtn.addEventListener('click', () => this.exportEventLog());
+                this.pauseLogToggle.addEventListener('click', () => this.toggleEventLogPause());
+                
+                // Server controls
+                this.sendBroadcastBtn.addEventListener('click', () => this.sendBroadcastMessage());
+                this.kickPlayerBtn.addEventListener('click', () => this.kickSelectedPlayer());
+                this.sendCommandBtn.addEventListener('click', () => this.sendServerCommand());
+                this.restartRelayBtn.addEventListener('click', () => this.sendRestartSignal());
+                this.logLevelBtn.addEventListener('click', () => this.cycleLogLevel());
+                
+                // Modal controls
+                this.closeModalBtn.addEventListener('click', () => this.closeSessionDetailsModal());
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'k') {
+                        e.preventDefault();
+                        this.wsHostInput.focus();
+                    }
+                    if (e.ctrlKey && e.key === 'b') {
+                        e.preventDefault();
+                        this.broadcastMessageInput.focus();
+                    }
+                    if (e.ctrlKey && e.key === 'l') {
+                        e.preventDefault();
+                        this.clearEventLog();
+                    }
+                    if (e.key === '?') {
+                        e.preventDefault();
+                        this.showHelpOverlay();
+                    }
+                });
+            }
+            
+            connect() {
+                const host = this.wsHostInput.value.trim() || 'localhost:3001';
+                const token = this.wsTokenInput.value.trim() || 'planetwood-admin';
+                
+                // Close existing connection if any
+                if (this.ws) {
+                    this.ws.close();
+                }
+                
+                this.updateStatusDisplay('connecting');
+                this.sessionIdDisplay.textContent = 'Session ID: Connecting...';
+                
+                try {
+                    this.ws = new WebSocket(`ws://${host}`);
+                    
+                    this.ws.onopen = () => {
+                        this.authenticate(token);
+                this.resubscribeToEvents();
+                this.requestState();
+                this.reconnectAttempts = 0;
+            };
+            
+            this.ws.onmessage = (event) => {
+                this.handleWebSocketMessage(event.data);
+            };
+            
+            this.ws.onclose = () => {
+                this.updateStatusDisplay('disconnected');
+                this.sessionIdDisplay.textContent = 'Session ID: — ';
+                this.handleDisconnect();
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.handleDisconnect();
+            };
+        } catch (error) {
+            console.error('Failed to create WebSocket:', error);
+            this.handleDisconnect();
+        }
+    }
+    
+    handleDisconnect() {
+        // Exponential backoff reconnect
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+        this.reconnectAttempts++;
+        this.updateStatusDisplay('connecting');
+        setTimeout(() => this.connect(), delay);
+    }
+    
+    authenticate(token) {
+                this.ws.send(JSON.stringify({
+                    type: 'admin_auth',
+                    token: token
+                }));
+            }
+            
+            resubscribeToEvents() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({
+                        type: 'admin_subscribe',
+                        events: ['join', 'leave', 'chat', 'sync', 'error']
+                    }));
+                }
+            }
+            
+            requestState() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({
+                        type: 'admin_get_state'
+                    }));
+                }
+            }
+            
+            handleWebSocketMessage(data) {
+                let message;
+                try {
+                    message = JSON.parse(data);
+                } catch (error) {
+                    console.error('Failed to parse WebSocket message:', data, error);
+                    return;
+                }
+                
+                switch (message.type) {
+                    case 'admin_auth_ok':
+                        this.handleAuthSuccess(message.sessionId);
+                        break;
+                    case 'admin_auth_fail':
+                        this.handleAuthFailure(message.reason);
+                        break;
+                    case 'admin_state':
+                        this.handleStateUpdate(message);
+                        break;
+                    case 'admin_event':
+                        this.handleEvent(message);
+                        break;
+                    case 'admin_broadcast_ack':
+                        console.log('Broadcast acknowledged:', message);
+                        break;
+                    default:
+                        console.warn('Unknown message type:', message.type);
+                }
+            }
+            
+            handleAuthSuccess(sessionId) {
+                this.updateStatusDisplay('connected');
+                this.sessionIdDisplay.textContent = `Session ID: ${sessionId}`;
+                this.addEventToLog('system', `Connected to server (Session: ${sessionId})`);
+            }
+            
+            handleAuthFailure(reason) {
+                this.updateStatusDisplay('disconnected');
+                this.sessionIdDisplay.textContent = `Session ID: Auth Failed`;
+                this.addEventToLog('error', `Authentication failed: ${reason}`);
+                // Show error with settings button
+                alert(`Authentication failed: ${reason}\nClick "Settings" to check your connection details.`);
+            }
+            
+            handleStateUpdate(state) {
+                this.sessions = state.sessions || {};
+                this.totalSessions = state.totalSessions || 0;
+                this.peakConcurrent = Math.max(this.peakConcurrent, state.peakConcurrent || 0);
+                
+                // Update uptime if provided
+                if (state.uptime !== undefined) {
+                    this.uptimeStart = Date.now() - (state.uptime * 1000);
+                }
+                
+                // Update players
+                if (state.players && Array.isArray(state.players)) {
+                    this.updatePlayers(state.players);
+                }
+                
+                this.updateUI();
+            }
+            
+            handleEvent(event) {
+                // Add to event log
+                this.addEventToLog(event.event, event.data);
+                
+                // Update UI based on event type
+                switch (event.event) {
+                    case 'player_joined':
+                    case 'player_left':
+                    case 'player_updated':
+                        // These will be handled in state updates
+                        break;
+                    case 'chat_message':
+                        // Update chat history for relevant player
+                        if (event.data.playerId && this.players.has(event.data.playerId)) {
+                            const player = this.players.get(event.data.playerId);
+                            player.update({
+                                chatMessage: event.data.message,
+                                fromSelf: event.data.fromSelf || false
+                            });
+                        }
+                        break;
+                    // Add more event handlers as needed
+                }
+                
+                this.updateUI();
+            }
+            
+            updatePlayers(playersData) {
+                // Clear current players
+                this.players.clear();
+                
+                // Add/update players from data
+                playersData.forEach(playerData => {
+                    const player = new Player(playerData);
+                    this.players.set(player.id, player);
+                });
+                
+                // Update connected since timestamps for existing players
+                this.players.forEach((player, id) => {
+                    const playerData = playersData.find(p => p.id === id);
+                    if (playerData && playerData.connectedSince) {
+                        player.update({connectedSince: playerData.connectedSince});
+                    }
+                });
+            }
+            
+            updateUI() {
+                this.updatePlayerTable();
+                this.updateOverviewCards();
+                this.updatePlayerCountChart();
+                this.updateMessageRateChart();
+                this.updateLatencyDistributionChart();
+                this.updateKickPlayerSelect();
+            }
+            
+            updatePlayerTable() {
+                if (this.players.size === 0) {
+                    this.playerTableBody.innerHTML = `
+                        <div class="table-row">
+                            <div class="table-cell" colspan="9" style="text-align: center; color: var(--muted-text);">
+                                No players connected
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '';
+                const playersArray = Array.from(this.players.values());
+                
+                // Sort by connection time (newest first)
+                playersArray.sort((a, b) => b.connectedSince - a.connectedSince);
+                
+                playersArray.forEach((player, index) => {
+                    const statusClass = `status-${player.status.toLowerCase()}`;
+                    const latencyClass = `latency-${this.getLatencyCategory(player.latency)}`;
+                    
+                    html += `
+                        <div class="table-row" data-player-id="${player.id}">
+                            <div class="table-cell" data-label="#">${index + 1}</div>
+                            <div class="table-cell" data-label="Player ID">${player.id}</div>
+                            <div class="table-cell" data-label="Name">${player.name}</div>
+                            <div class="table-cell" data-label="IP">${player.ip}</div>
+                            <div class="table-cell ${statusClass}" data-label="Status">${this.getStatusEmoji(player.status)} ${player.status.charAt(0).toUpperCase() + player.status.slice(1)}</div>
+                            <div class="table-cell ${latencyClass}" data-label="Latency">${player.latency}ms</div>
+                            <div class="table-cell" data-label="Anim State">${player.animState}</div>
+                            <div class="table-cell" data-label="Position">(${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)}, ${player.position.z.toFixed(1)})</div>
+                            <div class="table-cell" data-label="Connected Since">${this.formatTime(player.connectedSince)}</div>
+                            <div class="table-cell actions-cell" data-label="Actions">
+                                <button class="btn-action message" data-player-id="${player.id}" data-player-name="${player.name}">Message</button>
+                                <button class="btn-action kick" data-player-id="${player.id}" data-player-name="${player.name}">Kick</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                this.playerTableBody.innerHTML = html;
+                
+                // Add event listeners to action buttons
+                this.playerTableBody.querySelectorAll('.btn-action.message').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const playerId = e.target.getAttribute('data-player-id');
+                        const playerName = e.target.getAttribute('data-player-name');
+                        this.openMessagePlayerDialog(playerId, playerName);
+                    });
+                });
+                
+                this.playerTableBody.querySelectorAll('.btn-action.kick').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const playerId = e.target.getAttribute('data-player-id');
+                        const playerName = e.target.getAttribute('data-player-name');
+                        this.confirmKickPlayer(playerId, playerName);
+                    });
+                });
+            }
+            
+            updateOverviewCards() {
+                const activeCount = this.players.size;
+                this.activePlayersDisplay.textContent = `${activeCount}`;
+                
+                // Update max players (would come from server config)
+                this.maxPlayersDisplay.textContent = `/ 100`; // Placeholder
+                
+                this.totalSessionsDisplay.textContent = this.totalSessions.toLocaleString();
+                this.peakConcurrentDisplay.textContent = this.peakConcurrent.toLocaleString();
+                
+                // Update player count sparkline
+                this.updatePlayerCountSparkline();
+            }
+            
+            updatePlayerCountSparkline() {
+                const ctx = this.playerCountSparklineCanvas.getContext('2d');
+                const width = this.playerCountSparklineCanvas.width;
+                const height = this.playerCountSparklineCanvas.height;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+                
+                // Get recent player counts (last 60 seconds)
+                const recentCounts = this.playerCountHistory
+                    .slice(-60)
+                    .map(entry => entry.count);
+                
+                if (recentCounts.length === 0) return;
+                
+                // Find min and max for scaling
+                const minCount = Math.min(...recentCounts);
+                const maxCount = Math.max(...recentCounts);
+                const range = maxCount - minCount || 1; // Avoid division by zero
+                
+                // Draw line
+                ctx.beginPath();
+                ctx.strokeStyle = 'var(--primary-green)';
+                ctx.lineWidth = 2;
+                
+                recentCounts.forEach((count, index) => {
+                    const x = (index / (recentCounts.length - 1)) * width;
+                    const y = height - ((count - minCount) / range) * height;
+                    
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+                
+                ctx.stroke();
+            }
+            
+            updatePlayerCountChart() {
+                // This would be implemented with actual charting logic
+                // For now, we'll just update the peak label
+                const currentCount = this.players.size;
+                this.playerCountHistory.push({time: Date.now(), count: currentCount});
+                
+                // Keep only last 5 minutes (300 seconds) of data
+                const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+                this.playerCountHistory = this.playerCountHistory.filter(entry => entry.time > fiveMinutesAgo);
+                
+                // Find peak
+                const peakCount = Math.max(...this.playerCountHistory.map(entry => entry.count), 0);
+                this.playerCountPeakLabel.textContent = `Peak: ${peakCount}`;
+            this.${peakCount}`;
+            }
+            
+            updateMessageRateChart() {
+                // Placeholder for message rate chart
+                // In a real implementation, this would track messages/sec
+                this.messageRatePeakLabel.textContent = `Peak: 0 msg/s`;
+            }
+            
+            updateLatencyDistributionChart() {
+                // Update latency distribution display
+                let totalPlayers = 0;
+                Object.values(this.latencyDistribution).forEach(count => {
+                    totalPlayers += count;
+                });
+                this.latencyDistTotal.textContent = `${totalPlayers} players`;
+                
+                // In a real implementation, this would draw a bar chart
+                // For now, we'll just update the display
+            }
+            
+            updateKickPlayerSelect() {
+                // Clear and repopulate the kick player select
+                this.kickPlayerSelect.innerHTML = '<option value="">Select player to kick</option>';
+                
+                this.players.forEach((player, id) => {
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = `${player.name} (${id})`;
+                    this.kickPlayerSelect.appendChild(option);
+                });
+            }
+            
+            addEventToLog(eventType, data) {
+                if (this.pausedEventLog) return;
+                
+                const timestamp = new Date();
+                const timeString = `${this.padZero(timestamp.getHours())}:${this.padZero(timestamp.getMinutes())}:${this.padZero(timestamp.getSeconds())}`;
+                
+                let icon = '⚪';
+                let description = '';
+                
+                switch (eventType) {
+                    case 'player_joined':
+                        icon = '🎮';
+                        description = `${data.name || 'Unknown'} (${data.id}) joined from ${data.ip}`;
+                        break;
+                    case 'player_left':
+                        icon = '🚪';
+                        description = `${data.name || 'Unknown'} (${data.id}) disconnected - ${data.reason || 'unknown reason'}`;
+                        break;
+                    case 'chat_message':
+                        icon = '💬';
+                        const prefix = data.fromSelf ? 'You' : data.name || 'Unknown';
+                        description = `${prefix} › "${data.message}"`;
+                        break;
+                    case 'player_updated':
+                        icon = '🔄';
+                        description = `${data.name || 'Unknown'} (${data.id}) updated`;
+                        break;
+                    case 'system':
+                        icon = '⚙️';
+                        description = data.message || 'System event';
+                        break;
+                    case 'error':
+                        icon = '❌';
+                        description = `Error: ${data.message || 'Unknown error'}`;
+                        break;
+                    default:
+                        description = `${eventType}: ${JSON.stringify(data)}`;
+                }
+                
+                const eventEntry = {
+                    time: timeString,
+                    timestamp: timestamp.getTime(),
+                    type: eventType,
+                    icon: icon,
+                    description: description,
+                    data: data
+                };
+                
+                this.eventLog.unshift(eventEntry); // Add to beginning (newest first)
+                
+                // Limit to 1000 events
+                if (this.eventLog.length > 1000) {
+                    this.eventLog.pop();
+                }
+                
+                // Update display if not filtered or if matches filter
+                if (!this.pausedEventLog) {
+                    this.filterEventLog();
+                }
+            }
+            
+            filterEventLog() {
+                const filterValue = this.eventFilter.value;
+                let filteredLogs = this.eventLog;
+                
+                if (filterValue !== 'all') {
+                    filteredLogs = this.eventLog.filter(log => log.type === filterValue);
+                }
+                
+                // Display filtered logs
+                this.eventLogBody.innerHTML = '';
+                
+                filteredLogs.forEach(log => {
+                    const eventElement = document.createElement('div');
+                    eventElement.className = `event-entry ${log.type}`;
+                    eventElement.innerHTML = `
+                        <span class="event-time">[${log.time}]</span>
+                        <span class="event-icon">${log.icon}</span>
+                        <span class="event-description">${log.description}</span>
+                    `;
+                    this.eventLogBody.appendChild(eventElement);
+                });
+                
+                // Auto-scroll to bottom if not paused
+                if (!this.pausedEventLog) {
+                    this.eventLogBody.scrollTop = this.eventLogBody.scrollHeight;
+                }
+                
+                this.updateEventLogStatus(filteredLogs.length);
+            }
+            
+            clearEventLog() {
+                this.eventLog = [];
+                this.filterEventLog();
+            }
+            
+            exportEventLog() {
+                const blob = new Blob([JSON.stringify(this.eventLog, null, 2)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `planetwood-event-log-${new Date().toISOString().slice(0,19)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            toggleEventLogPause() {
+                this.pausedEventLog = !this.pausedEventLog;
+                this.pauseLogToggle.textContent = this.pausedEventLog ? 'Resume' : 'Pause';
+                this.pauseLogToggle.style.backgroundColor = this.pausedEventLog ? 'var(--success-green)' : 'var(--surface-alt)';
+                
+                if (!this.pausedEventLog) {
+                    this.filterEventLog(); // Update display when resuming
+                }
+            }
+            
+            sendBroadcastMessage() {
+                const message = this.broadcastMessageInput.value.trim();
+                if (!message) return;
+                
+                const type = this.broadcastTypeSelect.value;
+                
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify({
+                        type: 'admin_broadcast',
+                        message: `[${type.toUpperCase()}] ${message}`
+                    }));
+                    
+                    this.broadcastMessageInput.value = '';
+                    this.addEventToLog('system', `Broadcast sent: [${type.toUpperCase()}] ${message}`);
+                } else {
+                    alert('Not connected to server');
+                }
+            }
+            
+            kickSelectedPlayer() {
+                const playerId = this.kickPlayerSelect.value;
+                if (!playerId) {
+                    alert('Please select a player to kick');
+                    return;
+                }
+                
+                const playerName = this.kickPlayerSelect.selectedOptions[0].textContent.split(' (')[0];
+                this.confirmKickPlayer(playerId, playerName);
+            }
+            
+            confirmKickPlayer(playerId, playerName) {
+                if (confirm(`Are you sure you want to kick ${playerName} (${playerId})?`)) {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({
+                            type: 'admin_kick',
+                            playerId: playerId
+                        }));
+                        
+                        this.addEventToLog('system', `Kick initiated for ${playerName} (${playerId})`);
+                    } else {
+                        alert('Not connected to server');
+                    }
+                }
+            }
+            
+            sendServerCommand() {
+                const command = this.serverCommandInput.value.trim();
+                if (!command) return;
+                
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    // In a real implementation, this would send a custom command
+                    // For now, we'll just log it
+                    this.addEventToLog('system', `Server command sent: ${command}`);
+                    this.serverCommandInput.value = '';
+                } else {
+                    alert('Not connected to server');
+                }
+            }
+            
+            sendRestartSignal() {
+                if (confirm('Are you sure you want to restart the relay server?')) {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({
+                            type: 'admin_restart'
+                        }));
+                        
+                        this.addEventToLog('system', 'Restart signal sent to server');
+                    } else {
+                        alert('Not connected to server');
+                    }
+                }
+            }
+            
+            cycleLogLevel() {
+                const levels = ['debug', 'info', 'warn', 'error'];
+                let currentIndex = levels.indexOf(this.logLevelBtn.getAttribute('data-log-level'));
+                currentIndex = (currentIndex + 1) % levels.length;
+                const newLevel = levels[currentIndex];
+                
+                this.logLevelBtn.setAttribute('data-log-level', newLevel);
+                this.logLevelBtn.textContent = `Log Level: ${newLevel.toUpperCase()}`;
+                this.logLevelBtn.style.backgroundColor = 
+                    newLevel === 'debug' ? 'var(--info-blue)' :
+                    newLevel === 'info' ? 'var(--primary-green)' :
+                    newLevel === 'warn' ? 'var(--warning-amber)' :
+                    'var(--error-red)';
+                
+                this.addEventToLog('system', `Log level changed to ${newLevel}`);
+            }
+            
+            openSessionDetailsModal(playerId) {
+                const player = this.players.get(playerId);
+                if (!player) return;
+                
+                this.modalPlayerName.textContent = player.name;
+                this.modalPlayerId.textContent = player.id;
+                this.modalPlayerIp.textContent = player.ip;
+                this.modalConnectionTime.textContent = this.formatTime(player.connectedSince);
+                this.modalPlayerStatus.textContent = player.status.charAt(0).toUpperCase() + player.status.slice(1);
+                this.modalPlayerStatus.style.color = player.getStatusColor();
+                
+                this.updateModalLatencySparkline(player);
+                this.updateModalPositionMap(player);
+                this.updateModalChatHistory(player);
+                this.modalAnimationState.textContent = player.animState;
+                this.modalAnimationClip.textContent = 'Clip Name'; // Would come from player data
+                
+                // Set button data attributes
+                this.modalMessageBtn.setAttribute('data-player-id', player.id);
+                this.modalMessageBtn.setAttribute('data-player-name', player.name);
+                this.modalKickBtn.setAttribute('data-player-id', player.id);
+                this.modalKickBtn.setAttribute('data-player-name', player.name);
+                
+                this.sessionDetailsModal.classList.add('active');
+                // Trap focus in modal
+                this.trapFocusInModal();
+            }
+            
+            closeSessionDetailsModal() {
+                this.sessionDetailsModal.classList.remove('active');
+                // Return focus to trigger element would go here
+            }
+            
+            updateModalLatencySparkline(player) {
+                const ctx = this.modalLatencySparkline.getContext('2d');
+                const width = this.modalLatencySparkline.width;
+                const height = this.modalLatencySparkline.height;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, width, height);
+                
+                if (player.latencyHistory.length === 0) {
+                    ctx.fillStyle = 'var(--muted-text)';
+                    ctx.font = '12px monospace';
+                    ctx.fillText('No data', 10, 20);
+                    return;
+                }
+                
+                // Get latencies for sparkline
+                const latencies = player.latencyHistory.map(entry => entry.latency);
+                
+                // Find min and max for scaling
+                const minLatency = Math.min(...latencies);
+                const maxLatency = Math.max(...latencies);
+                const range = maxLatency - minLatency || 1; // Avoid division by zero
+                
+                // Draw line
+                ctx.beginPath();
+                ctx.strokeStyle = 'var(--primary-green)';
+                ctx.lineWidth = 2;
+                
+                latencies.forEach((latency, index) => {
+                    const x = (index / (latencies.length - 1)) * width;
+                    const y = height - ((latency - minLatency) / range) * height;
+                    
+                    if (index === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x
