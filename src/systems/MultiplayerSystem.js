@@ -1,6 +1,7 @@
 import * as protobuf from 'protobufjs';
 import * as THREE from 'three';
 import { PlayerAvatar } from '../entities/PlayerAvatar.js';
+import { debugWarn } from '../utils/debug.js';
 
 const SYNC_INTERVAL = 1000 / 35;
 const PING_RATE = 1000 / 20;
@@ -317,7 +318,7 @@ export class MultiplayerSystem {
     if (!this.connected) return;
     const verification = RealmData.verify(obj);
     if (verification) {
-      console.warn('websocket data error', verification);
+      debugWarn('websocket data error', verification);
       return;
     }
     const msg = RealmData.create(obj);

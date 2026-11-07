@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { debugWarn } from '../utils/debug.js';
 
 /**
  * Material & shader system that enhances glTF-loaded materials
@@ -25,7 +26,7 @@ export class MaterialSystem {
         this.ktxLoader = renderer;
       });
     } catch (e) {
-      console.warn('[MaterialSystem] KTX2 loader unavailable, using fallback colors');
+      debugWarn('[MaterialSystem] KTX2 loader unavailable, using fallback colors');
     }
 
     this._applyMaterialOverrides();

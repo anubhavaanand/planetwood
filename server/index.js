@@ -136,7 +136,9 @@ function sendProtobufToClient(client, dataObj) {
   if (!RealmData) return;
   const verification = RealmData.verify(dataObj);
   if (verification) {
-    console.warn('protobuf verify error', verification);
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('protobuf verify error', verification);
+    }
     return;
   }
   const msg = RealmData.create(dataObj);
@@ -152,7 +154,9 @@ function broadcastRealmData(room, excludeId, dataObj) {
   if (!RealmData) return;
   const verification = RealmData.verify(dataObj);
   if (verification) {
-    console.warn('protobuf verify error', verification);
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('protobuf verify error', verification);
+    }
     return;
   }
   const msg = RealmData.create(dataObj);
@@ -180,7 +184,9 @@ wss.on('connection', (ws) => {
   let connected = false;
 
   ws.send(JSON.stringify({ id: client.id }));
-  console.log(`[connect] ${client.displayName} (${client.id})`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[connect] ${client.displayName} (${client.id})`);
+  }
 
   ws.on('message', (raw) => {
     if (typeof raw !== 'string') {
@@ -253,7 +259,9 @@ wss.on('connection', (ws) => {
       }
 
       ws.send(JSON.stringify({ r: room.id, restorePos, restoreRot }));
-      console.log(`[join] ${client.displayName} (${client.id}) -> ${room.id}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[join] ${client.displayName} (${client.id}) -> ${room.id}`);
+      }
 
       // Notify existing clients about new client
       room.broadcastJson(client.id, {
@@ -340,7 +348,9 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     saveLastKnownPosition(client);
     if (room) {
-      console.log(`[leave] ${client.displayName} (${client.id}) from ${room.id}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[leave] ${client.displayName} (${client.id}) from ${room.id}`);
+      }
       room.remove(client.id);
       room.broadcastJson(client.id, {
         data: {
@@ -387,4 +397,6 @@ setInterval(() => {
   }
 }, 5000);
 
-console.log(`Planetwood relay running on ws://localhost:${PORT}`);
+if (process.env.NODE_ENV !== 'production') {
+  console.log(`Planetwood relay running on ws://localhost:${PORT}`);
+}

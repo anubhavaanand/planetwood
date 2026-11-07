@@ -7,6 +7,7 @@ import { StreetSystem } from './systems/StreetSystem.js';
 import { PlanetSystem } from './systems/PlanetSystem.js';
 import { NPCSystem } from './systems/NPCSystem.js';
 import { MultiplayerSystem } from './systems/MultiplayerSystem.js';
+import { debugWarn, debugError, debugLog } from './utils/debug.js';
 import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { QuestSystem } from './systems/QuestSystem.js';
@@ -83,11 +84,11 @@ async function init() {
   } catch (e) {
     if (e.message.includes('timed out')) {
       updateLoading('Street loaded (slow connection)', 40);
-      console.warn('Load timeout exceeded, continuing with available data');
+      debugWarn('Load timeout exceeded, continuing with available data');
     } else {
       loadingText.textContent = 'Error: ' + e.message;
       loadingProgress.style.width = '0%';
-      console.error(e);
+      debugError(e);
     }
   }
 }
@@ -209,7 +210,7 @@ async function initCore() {
 
   progressionSys.onCoinsChange = (coins) => {
     // Could update a coin counter UI here
-    console.log(`Coins: ${coins}`);
+    debugLog(`Coins: ${coins}`);
   };
 
   progressionSys.onReputationChange = (npcType, rep, tier) => {
