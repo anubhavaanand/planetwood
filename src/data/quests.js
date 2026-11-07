@@ -306,6 +306,28 @@ export const QUESTS = [
       },
     ],
   },
+  {
+    id: 'quest-planet',
+    description: 'A visitor from the street',
+    color: '#44aaff',
+    icon: 'ui/quests/house.icon',
+    steps: [
+      {
+        id: 'planet-arrival',
+        npc: 'planet-guardian',
+        ordered: true,
+        texts: [
+          "You've come through the arch. Few messengers make it to the surface.",
+          "I am the planet-guardian. Carry this word back to the street: the planet is alive, and it remembers your visit.",
+        ],
+        extraData: {
+          uiTitle: 'First Contact',
+          uiText: 'Speak with the planet-guardian on the surface',
+          uiColor: '#44aaff',
+        },
+      },
+    ],
+  },
 ];
 
 // Display names used in the messenger checklist header line for each quest.
@@ -316,6 +338,7 @@ export const QUEST_LABELS = {
   'quest-scientists': 'Scientists and mixed-up deliveries',
   'quest-temple': "An offering to the mountain temple",
   'quest-musician': "A note lost at sea",
+  'quest-planet': 'Word from the surface',
 };
 
 // Per-quest completion text shown when a quest is fully completed.
@@ -326,6 +349,7 @@ export const QUEST_COMPLETION_TEXT = {
   'quest-scientists': 'Sixty-three noodle packets remain unclaimed.',
   'quest-temple': 'The mountain accepts its offering.',
   'quest-musician': 'Future Dave is very proud of his hair.',
+  'quest-planet': 'The surface remembers your visit.',
 };
 
 // NPC -> npcType mapping used by NPCSystem._extractNPCData, so quests can find
@@ -342,4 +366,5 @@ export const QUEST_NPC_TYPES = {
   'mountainman': 'mountainman',
   'diver': 'diver',
   'musician': 'musician',
+  'planet-guardian': 'planet-guardian',
 };

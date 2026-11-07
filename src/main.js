@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { SceneSystem } from './systems/SceneSystem.js';
 import { AnimationSystem } from './systems/AnimationSystem.js';
 import { MeshLoader } from './systems/MeshLoader.js';
@@ -15,6 +16,7 @@ import { QuestUI } from './systems/QuestUI.js';
 import { DeliveryItemSystem } from './systems/DeliveryItemSystem.js';
 import { DialogueSystem } from './systems/DialogueSystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
+import { NPC } from './entities/NPC.js';
 import { AvatarCustomizationSystem } from './systems/AvatarCustomizationSystem.js';
 import { ProgressionSystem } from './systems/ProgressionSystem.js';
 import { QUESTS } from './data/quests.js';
@@ -48,8 +50,23 @@ let questSys = null;
 let fallbackTimer = null;
 let progressionSys = null;
 
-// Game flow state: 'loading' | 'title' | 'intro' | 'playing'
+// Game flow state: 'loading' | 'title' | 'intro' | 'tutorial' | 'playing'
 let gameState = 'loading';
+
+// Tutorial state — persisted so returning players skip or shorten it.
+const TUTORIAL_STORAGE_KEY = 'planetwood.tutorialComplete';
+let tutorialNpc = null; // the highlighted first NPC for the guaranteed interaction
+let tutorialMarker = null; // visual indicator (CSS2DObject) above the tutorial NPC
+
+// Tutorial dialogue — teaches movement, interaction, and delivery rewards.
+const TUTORIAL_TEXTS = [
+  "Welcome to Planetwood! I'm your first stop on the street.",
+  "Move around with W A S D to find people who need deliveries.",
+  "When you're close to someone, press E to talk to them.",
+  "Deliveries earn you coins, XP, and reputation — check the checklist corner.",
+  "That's all you need to know. Good luck, messenger!",
+];
+let tutorialTextIndex = 0;
 
 // Whether the player is currently on the planet scene (z > 160) vs the street.
 let inPlanetScene = false;
@@ -330,13 +347,29 @@ async function initCore() {
         ui.showInput();
       }
       const isInteractKey = e.code === 'KeyE' || e.key === 'e' || e.key === 'E';
-      if (isInteractKey && gameState === 'playing') {
+      if (isInteractKey && (gameState === 'playing' || gameState === 'tutorial')) {
         e.preventDefault();
         if (dialogueSys.active) {
+          if (gameState === 'tutorial') {
+            // Advance tutorial text manually (tutorial dialogue bypasses QuestSystem steps).
+            tutorialTextIndex++;
+            if (tutorialTextIndex < TUTORIAL_TEXTS.length) {
+              renderTutorialText();
+            } else {
+              dialogueSys.close();
+              completeTutorial();
+            }
+            return;
+          }
           dialogueSys.advance();
           return;
         }
-        _tryInteract();
+        if (gameState === 'playing') {
+          _tryInteract();
+        }
+        if (gameState === 'tutorial') {
+          _tryInteractTutorial();
+        }
       }
     });
 
@@ -353,6 +386,18 @@ async function initCore() {
     ui.addNameplate(npc, npc.displayName);
     ui.addInteractPrompt(npc);
     if (questSys) questSys.registerNpc(npc);
+  }
+
+  // Planet-surface NPC — gives the z > 160 transition a narrative purpose.
+  // Added to planetSys.group so it shows/hides with the planet scene;
+  // added to npcSys.npcs so interact prompts and _tryInteract find it.
+  const planetGuardian = await _createPlanetGuardianNPC(animSys, animData, meshLoader);
+  if (planetGuardian) {
+    planetSys.group.add(planetGuardian.group);
+    npcSys.npcs.push(planetGuardian);
+    ui.addNameplate(planetGuardian, planetGuardian.displayName);
+    ui.addInteractPrompt(planetGuardian);
+    if (questSys) questSys.registerNpc(planetGuardian);
   }
 
   updateLoading('Ready!', 100);
@@ -411,6 +456,10 @@ function showTitle() {
 }
 
 function showIntro() {
+  const tutorialAlreadyDone =
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem(TUTORIAL_STORAGE_KEY) === '1';
+
   const box = document.createElement('div');
   box.id = 'intro-box';
   Object.assign(box.style, {
@@ -446,13 +495,22 @@ function showIntro() {
   box.appendChild(hint);
   document.body.appendChild(box);
 
+  const finishIntro = () => {
+    box.remove();
+    if (tutorialAlreadyDone) {
+      gameState = 'playing';
+    } else {
+      gameState = 'tutorial';
+      startTutorial();
+    }
+  };
+
   const advance = () => {
     introLineIndex++;
     if (introLineIndex < INTRO_LINES.length) {
       textEl.textContent = INTRO_LINES[introLineIndex];
     } else {
-      box.remove();
-      gameState = 'playing';
+      finishIntro();
     }
   };
 
@@ -466,6 +524,176 @@ function showIntro() {
     window.addEventListener('click', handler);
     window.addEventListener('keydown', handler);
   }, 0);
+}
+
+/**
+ * Begins the guaranteed first-NPC tutorial. Finds the nearest NPC, highlights it
+ * with a visual marker, forces its interact prompt to be visible, and starts the
+ * tutorial dialogue. Movement is allowed during the tutorial so the player can
+ * walk up to the highlighted NPC.
+ */
+function startTutorial() {
+  if (!npcSys || npcSys.npcs.length === 0) {
+    // No NPCs loaded yet — fall straight to playing.
+    gameState = 'playing';
+    return;
+  }
+
+  const playerPos = playerAvatar ? playerAvatar.group.position : new THREE.Vector3(0, 0, -90);
+  let nearest = null;
+  let nearestDist = Infinity;
+  for (const npc of npcSys.npcs) {
+    const d = npc.group.position.distanceTo(playerPos);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearest = npc;
+    }
+  }
+  tutorialNpc = nearest;
+  if (!tutorialNpc) {
+    gameState = 'playing';
+    return;
+  }
+
+  // Visual marker above the tutorial NPC so the player knows who to approach.
+  tutorialMarker = document.createElement('div');
+  tutorialMarker.textContent = 'TALK TO ME →';
+  Object.assign(tutorialMarker.style, {
+    color: '#fcd436',
+    fontFamily: "'Courier New', Courier, monospace",
+    fontSize: '14px',
+    fontWeight: '700',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    background: 'rgba(30, 40, 42, 0.95)',
+    whiteSpace: 'nowrap',
+    userSelect: 'none',
+    pointerEvents: 'none',
+    border: '2px solid #fcd436',
+    backdropFilter: 'blur(4px)',
+  });
+  const markerLabel = new CSS2DObject(tutorialMarker);
+  markerLabel.position.set(0, 3.6, 0);
+  tutorialNpc.group.add(markerLabel);
+
+  // Guarantee the floating E prompt is visible for this NPC.
+  ui.setInteractPromptVisible(tutorialNpc, true);
+
+  // Open tutorial dialogue immediately (player walks up, then presses E).
+  openTutorialDialogue();
+}
+
+/**
+ * Opens the in-game dialogue box with the tutorial text sequence.
+ */
+function openTutorialDialogue() {
+  tutorialTextIndex = 0;
+  dialogueSys.container.style.display = '';
+  dialogueSys.container.style.pointerEvents = 'auto';
+  dialogueSys.active = true;
+  dialogueSys.currentNpc = tutorialNpc;
+  dialogueSys.currentStep = null;
+  dialogueSys.textIndex = 0;
+  dialogueSys.showingChoices = false;
+  dialogueSys._renderTutorialText = dialogueSys._renderTutorialText || renderTutorialText;
+  renderTutorialText();
+}
+
+/**
+ * Renders the current tutorial line into the dialogue box.
+ */
+function renderTutorialText() {
+  const tutorialFaceColors = {
+    'office-worker': '#66BDE6',
+    boss: '#c25959',
+    caveman: '#f3c258',
+    'young-lady': '#8cc48c',
+    default: '#9ab0b4',
+  };
+  dialogueSys.nameEl.textContent = tutorialNpc ? tutorialNpc.displayName : 'Guide';
+  dialogueSys.avatarFace.style.background =
+    tutorialFaceColors[tutorialNpc ? tutorialNpc.npcType : 'default'] ||
+    tutorialFaceColors.default;
+  dialogueSys.textEl.textContent = TUTORIAL_TEXTS[tutorialTextIndex];
+  dialogueSys.continueBtn.style.display = '';
+  dialogueSys._clearChoices();
+}
+
+/**
+ * Completes the tutorial: removes the marker, persists completion, and enters
+ * playing state. Subsequent visits skip the tutorial.
+ */
+function completeTutorial() {
+  if (tutorialMarker && tutorialMarker.parentNode) {
+    tutorialMarker.parentNode.removeChild(tutorialMarker);
+  }
+  tutorialMarker = null;
+  tutorialNpc = null;
+  dialogueSys.close();
+
+  if (typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, '1');
+    } catch {
+      // localStorage unavailable — tutorial will show every visit.
+    }
+  }
+
+  gameState = 'playing';
+  ui.addNotification('Tutorial complete — happy delivering!');
+  srAnnounce('Tutorial complete. Happy delivering!', 'polite');
+}
+
+/**
+ * Creates the planet-surface guardian NPC. Uses the alien model as the
+ * guardian's visual (no dedicated planet-guardian asset exists yet), skinned
+ * to the alien skeleton with its idle animation. Placed at z ≈ 220 on the
+ * planet surface by the caller.
+ */
+async function _createPlanetGuardianNPC(animSys, animData, meshLoader) {
+  const npc = new NPC({
+    id: 'planet-guardian',
+    npcType: 'planet-guardian',
+    displayName: 'Planet Guardian',
+    position: new THREE.Vector3(0, 0, 220),
+  });
+
+  const skinEntry = animSys.findSkinEntry(animData, 'alien');
+  if (!skinEntry) {
+    // Fallback to a visible box so the NPC is never invisible.
+    const geo = new THREE.BoxGeometry(1, 2, 1);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x44aaff });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, 0, 220);
+    npc.setSkinnedMesh(mesh, null);
+    return npc;
+  }
+
+  const { bones, skeleton } = animSys.createSkin(skinEntry, 'alien');
+
+  if (meshLoader) {
+    const meshUrl = './assets/npcs/present/alien/alien.drc';
+    try {
+      const mesh = await meshLoader.createSkinnedMesh(meshUrl, skeleton);
+      npc.setSkinnedMesh(mesh, skeleton);
+    } catch (e) {
+      const geo = new THREE.BoxGeometry(1, 2, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x44aaff });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, 0, 220);
+      npc.setSkinnedMesh(mesh, null);
+      return npc;
+    }
+  }
+
+  const animEntry = animSys.findAnimEntry(animData, 'alien', 'idle');
+  if (animEntry && npc.skeleton) {
+    const { clip } = animSys.createSkinAnimation(animEntry, npc.skeleton, 'planet-guardian-idle');
+    npc.addAnimation('idle', clip);
+    npc.playAnimation('idle');
+  }
+
+  return npc;
 }
 
 function _tryInteract() {
@@ -486,6 +714,21 @@ function _tryInteract() {
     dialogueSys.open(nearest);
   } else {
     ui.addNotification("There's nothing to say right now.");
+  }
+}
+
+/**
+ * Tutorial-specific interaction: only the highlighted tutorial NPC can be
+ * interacted with, and it opens the tutorial dialogue sequence.
+ */
+function _tryInteractTutorial() {
+  if (!playerAvatar || !tutorialNpc || dialogueSys.active) return;
+  const playerPos = playerAvatar.group.position;
+  const d = tutorialNpc.group.position.distanceTo(playerPos);
+  if (d < 7) {
+    openTutorialDialogue();
+  } else {
+    ui.addNotification("Walk closer to the highlighted NPC.");
   }
 }
 
@@ -611,9 +854,11 @@ function animate() {
   const delta = sceneSys.clock.getDelta();
 
   const playing = gameState === 'playing';
+  const tutorialActive = gameState === 'tutorial';
+  const canMove = playing || tutorialActive;
   const dialogueActive = dialogueSys && dialogueSys.active;
 
-  if (input && playing && !dialogueActive) {
+  if (input && canMove && !dialogueActive) {
     const result = input.update(delta);
     if (playerAvatar) {
       playerAvatar.group.position.add(result.movement);
@@ -634,6 +879,7 @@ function animate() {
   }
 
   // Camera mode: 2.5D follow on the street, orbit controls on the planet.
+  // Planet transition is gated behind playing state so the tutorial stays on the street.
   if (playing && playerAvatar) {
     const playerZ = playerAvatar.group.position.z;
 
@@ -666,7 +912,7 @@ function animate() {
     }
   }
 
-  if (multiplayer && playerAvatar && playing) {
+  if (multiplayer && playerAvatar && canMove) {
     multiplayer.setLocalState(
       playerAvatar.group.position,
       playerAvatar.group.quaternion,
@@ -675,20 +921,27 @@ function animate() {
     multiplayer.update(delta);
   }
 
-  if (npcSys && playing) npcSys.update(delta);
-  if (playerAvatar && playing) playerAvatar.update(delta);
-  if (deliveryItemSys && playing) deliveryItemSys.update(delta);
+  if (npcSys && canMove) npcSys.update(delta);
+  if (playerAvatar && canMove) playerAvatar.update(delta);
+  if (deliveryItemSys && canMove) deliveryItemSys.update(delta);
 
   sceneSys.update();
-  if (ui && playing) ui.cullNameplates(sceneSys.camera);
+  if (ui && canMove) ui.cullNameplates(sceneSys.camera);
 
   // Interact proximity prompt: show floating "E" when player is within 10 units
   // of an NPC; hide inside the 7-unit interaction radius or beyond 10 units.
-  if (playing && !dialogueActive && playerAvatar && npcSys) {
+  // During the tutorial, force the tutorial NPC's prompt to stay visible so the
+  // first interaction is guaranteed discoverable.
+  if (canMove && !dialogueActive && playerAvatar && npcSys) {
     const playerPos = playerAvatar.group.position;
     for (const npc of npcSys.npcs) {
       const d = npc.group.position.distanceTo(playerPos);
-      const show = d < 10 && d >= 7;
+      let show = false;
+      if (tutorialActive) {
+        show = npc === tutorialNpc; // only the highlighted NPC shows its prompt
+      } else {
+        show = d < 10 && d >= 7;
+      }
       ui.setInteractPromptVisible(npc, show);
     }
   }
