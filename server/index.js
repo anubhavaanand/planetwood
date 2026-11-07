@@ -99,6 +99,32 @@ class Room {
 }
 
 const rooms = new Map();
+
+// Last-known position/rotation tracking for rejoin restoration.
+// Keyed by client id; entries expire after LAST_KNOWN_TTL.
+const LAST_KNOWN_TTL = 300 * 1000; // 300 seconds
+const LAST_KNOWN_CLEANUP_MS = 60 * 1000; // 1 minute
+const lastKnownPositions = new Map();
+
+function saveLastKnownPosition(client) {
+  if (!client.id) return;
+  lastKnownPositions.set(client.id, {
+    p: Array.isArray(client.data.p) ? [...client.data.p] : [0, 2, 0],
+    r: Array.isArray(client.data.r) ? [...client.data.r] : [0, 0, 0, 1],
+    ts: Date.now(),
+  });
+}
+
+function cleanupLastKnownPositions() {
+  const now = Date.now();
+  for (const [id, entry] of lastKnownPositions.entries()) {
+    if (now - entry.ts > LAST_KNOWN_TTL) {
+      lastKnownPositions.delete(id);
+    }
+  }
+}
+setInterval(cleanupLastKnownPositions, LAST_KNOWN_CLEANUP_MS);
+
 const wss = new WebSocketServer({ port: PORT });
 
 function getOrCreateRoom(name) {
@@ -212,7 +238,21 @@ wss.on('connection', (ws) => {
       room.add(client);
       connected = true;
       client.lastSeen = Date.now();
-      ws.send(JSON.stringify({ r: room.id }));
+
+      // Restore last-known position/rotation if this client rejoins with a
+      // previously-seen id (within TTL).
+      let restorePos = null;
+      let restoreRot = null;
+      const rejoinId = msg.rejoinId;
+      if (rejoinId && typeof rejoinId === 'string') {
+        const entry = lastKnownPositions.get(rejoinId);
+        if (entry && Date.now() - entry.ts <= LAST_KNOWN_TTL) {
+          restorePos = entry.p;
+          restoreRot = entry.r;
+        }
+      }
+
+      ws.send(JSON.stringify({ r: room.id, restorePos, restoreRot }));
       console.log(`[join] ${client.displayName} (${client.id}) -> ${room.id}`);
 
       // Notify existing clients about new client
@@ -298,6 +338,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    saveLastKnownPosition(client);
     if (room) {
       console.log(`[leave] ${client.displayName} (${client.id}) from ${room.id}`);
       room.remove(client.id);
@@ -317,6 +358,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('error', () => {
+    saveLastKnownPosition(client);
     if (room) room.remove(client.id);
   });
 });

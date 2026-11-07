@@ -150,6 +150,18 @@ async function initCore() {
 
   // Multiplayer system — connects to the WebSocket relay for cross-player presence.
   multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
+
+  // Apply restored last-known position/rotation to the local avatar on rejoin.
+  multiplayer.onRestoredPosition = ({ p, r }) => {
+    if (!playerAvatar) return;
+    if (p && Array.isArray(p) && p.length === 3) {
+      playerAvatar.group.position.set(p[0], p[1], p[2]);
+    }
+    if (r && Array.isArray(r) && r.length === 4) {
+      playerAvatar.group.quaternion.set(r[0], r[1], r[2], r[3]);
+    }
+  };
+
   multiplayer.connect();
 
   multiplayer.onPlayerJoined = (data) => {

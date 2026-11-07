@@ -39,6 +39,8 @@ export class MultiplayerSystem {
     this.clientsLimit = CLIENTS_LIMIT;
     this.localID = null;
     this.localIDLength = 0;
+    // Client id from the previous session, used to restore last-known position on rejoin.
+    this.rejoinId = localStorage.getItem('planetwood_client_id') || '';
 
     this._protoMsg = null;
     this._protoMsgFields = 0;
@@ -89,6 +91,8 @@ export class MultiplayerSystem {
     this.onChatMessage = null;
     this.onEmote = null;
     this.onNotification = null;
+    // Fired when the server restores a last-known position on rejoin: { p, r }.
+    this.onRestoredPosition = null;
 
     loadRealmData().then(msg => {
       this._protoMsg = msg;
@@ -192,7 +196,14 @@ export class MultiplayerSystem {
       } else if (json.id && typeof json.id === 'string') {
         this.localID = json.id;
         this.localIDLength = this.localID.length;
-        this._requestRoom(this.roomRequested);
+        // The join request must use the id from the previous session (loaded
+        // from localStorage at construction) so the server can look up the
+        // last-known position. Capture it before overwriting with the new id.
+        const rejoinIdForJoin = this.rejoinId;
+        // Persist this connection's id so the next reconnection can request a position restore.
+        localStorage.setItem('planetwood_client_id', json.id);
+        this.rejoinId = json.id;
+        this._requestRoom(this.roomRequested, rejoinIdForJoin);
       } else if (json.r && typeof json.r === 'string') {
         this.clients.clear();
         this.roomRequested = json.r;
@@ -202,6 +213,20 @@ export class MultiplayerSystem {
         this._relayInterval = setInterval(this._boundRelay, this._updateRate);
         this._ping();
         this._relay(true);
+        // Apply restored position/rotation if the server sent one back.
+        // Update local synced state so the first state broadcast uses the
+        // restored position instead of the default start position.
+        if (json.restorePos || json.restoreRot) {
+          if (json.restorePos && Array.isArray(json.restorePos) && json.restorePos.length === 3) {
+            this._data.p = [...json.restorePos];
+          }
+          if (json.restoreRot && Array.isArray(json.restoreRot) && json.restoreRot.length === 4) {
+            this._data.r = [...json.restoreRot];
+          }
+          if (this.onRestoredPosition) {
+            this.onRestoredPosition({ p: json.restorePos, r: json.restoreRot });
+          }
+        }
         this._onRoomJoined(this.roomRequested);
       } else if (json.data) {
         if (this.onChatMessage) this.onChatMessage(json.data);
@@ -236,9 +261,9 @@ export class MultiplayerSystem {
     this._sendJson({ ping: Date.now() });
   }
 
-  _requestRoom(room = '') {
+  _requestRoom(room = '', rejoinId = this.rejoinId) {
     this.roomRequested = room;
-    this._sendJson({ r: [this.roomPrefix, this.roomRequested] });
+    this._sendJson({ r: [this.roomPrefix, this.roomRequested], rejoinId });
   }
 
   _retrieveChangedData() {
