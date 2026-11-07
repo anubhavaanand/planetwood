@@ -20,7 +20,7 @@ export class MaterialSystem {
     try {
       const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
       this.ktxLoader = new KTX2Loader();
-      this.ktxLoader.setTranscoderPath('https://unpkg.com/three@0.185.0/examples/jsm/basis/');
+      this.ktxLoader.setTranscoderPath('/planetwood/basis/');
       await this.ktxLoader.detectSupport(renderer => {
         this.ktxLoader = renderer;
       });
