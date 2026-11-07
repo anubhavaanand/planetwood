@@ -27,24 +27,33 @@ export class SceneSystem {
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
     this.camera.position.set(60, 45, 70);
 
+    // Performance tier detection for integrated GPUs (e.g., Intel Iris Plus)
+    const isLowEnd = this._detectLowEndDevice();
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(isLowEnd ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.type = isLowEnd ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = isLowEnd ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
+
+    this._isLowEnd = isLowEnd;
     container.appendChild(this.renderer.domElement);
 
     // Bloom post-processing for emissive VFX (waterfall, cables, etc.)
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const bloomRes = isLowEnd
+      ? new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2))
+      : new THREE.Vector2(window.innerWidth, window.innerHeight);
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5,  // strength
-      0.4,  // radius
-      0.85  // threshold
+      bloomRes,
+      isLowEnd ? 0.8 : 1.5,   // strength
+      isLowEnd ? 0.2 : 0.4,   // radius
+      0.85                    // threshold
     );
+    if (isLowEnd) bloomPass.enabled = false; // disable bloom on low-end devices
     this.composer.addPass(bloomPass);
     this.bloomPass = bloomPass;
 
@@ -82,6 +91,21 @@ export class SceneSystem {
     this._setupFpsCounter();
   }
 
+  _detectLowEndDevice() {
+    // Heuristic for integrated/low-end GPUs (e.g., Intel Iris Plus, UHD)
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) return true;
+    const renderer = gl.getParameter(gl.RENDERER) || '';
+    const vendor = gl.getParameter(gl.VENDOR) || '';
+    const lowEndKeywords = ['iris plus', 'uhd', 'hd graphics', 'integrated', 'intel hd', 'intel(r) hd'];
+    const combined = (renderer + ' ' + vendor).toLowerCase();
+    if (lowEndKeywords.some(k => combined.includes(k))) return true;
+    // Also treat low RAM devices as low-end
+    if (navigator.deviceMemory && navigator.deviceMemory <= 4) return true;
+    return false;
+  }
+
   _setupFpsCounter() {
     this.fpsEl = document.createElement('div');
     Object.assign(this.fpsEl.style, {
@@ -111,8 +135,9 @@ export class SceneSystem {
     const sun = new THREE.DirectionalLight(0xFFEECC, 1.8);
     sun.position.set(30, 40, 20);
     sun.castShadow = true;
-    sun.shadow.mapSize.width = 2048;
-    sun.shadow.mapSize.height = 2048;
+    const shadowSize = this._isLowEnd ? 1024 : 2048;
+    sun.shadow.mapSize.width = shadowSize;
+    sun.shadow.mapSize.height = shadowSize;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 80;
     sun.shadow.camera.left = -50;
@@ -282,6 +307,9 @@ export class SceneSystem {
   }
 
   dispose() {
+    this.composer?.dispose();
+    this.waterMaterial?.dispose();
+    this.grassMaterial?.dispose();
     this.renderer.dispose();
     this._textureCache.clear();
   }

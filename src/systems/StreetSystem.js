@@ -25,16 +25,21 @@ export class StreetSystem {
     this.road.receiveShadow = true;
     this.scene.add(this.road);
 
-    // ---- Center dashed line ----
+    // ---- Center dashed line (InstancedMesh) ----
     const dashGeo = new THREE.PlaneGeometry(0.5, 3);
     const dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const dashCount = 28;
+    this.dashInstanced = new THREE.InstancedMesh(dashGeo, dashMat, dashCount);
+    const dummy = new THREE.Object3D();
     for (let i = 0; i < dashCount; i++) {
-      const dash = new THREE.Mesh(dashGeo, dashMat);
-      dash.rotation.x = -Math.PI / 2;
-      dash.position.set(0, 0.05, -this.roadLength / 2 + 10 + i * 8);
-      this.scene.add(dash);
+      dummy.position.set(0, 0.05, -this.roadLength / 2 + 10 + i * 8);
+      dummy.rotation.x = -Math.PI / 2;
+      dummy.updateMatrix();
+      this.dashInstanced.setMatrixAt(i, dummy.matrix);
     }
+    this.dashInstanced.instanceMatrix.needsUpdate = true;
+    this.dashInstanced.frustumCulled = true;
+    this.scene.add(this.dashInstanced);
 
     // ---- Sidewalks ----
     const sidewalkWidth = 6;
@@ -60,13 +65,13 @@ export class StreetSystem {
     this._addBuildingRow(-(this.roadWidth / 2 + sidewalkWidth + 7));
     this._addBuildingRow(this.roadWidth / 2 + sidewalkWidth + 7);
 
-    // ---- Street lamps ----
+    // ---- Street lamps (InstancedMesh) ----
     this._addStreetLamps();
 
-    // ---- Trees ----
+    // ---- Trees (InstancedMesh) ----
     this._addTrees();
 
-    // ---- Mailboxes on left building wall ----
+    // ---- Mailboxes on left building wall (InstancedMesh) ----
     this._addMailboxes();
   }
 
@@ -129,17 +134,30 @@ export class StreetSystem {
       { x: 11, z: -70 }, { x: 11, z: -20 }, { x: 11, z: 30 }, { x: 11, z: 80 },
     ];
 
-    for (const p of positions) {
-      const group = new THREE.Group();
-      const pole = new THREE.Mesh(lampGeo, lampMat);
-      pole.position.y = 3.5;
-      group.add(pole);
-      const head = new THREE.Mesh(headGeo, headMat);
-      head.position.y = 7;
-      group.add(head);
-      group.position.set(p.x, 0, p.z);
-      this.scene.add(group);
-    }
+    const count = positions.length;
+    const dummy = new THREE.Object3D();
+
+    // Pole instanced mesh
+    this.lampPoleInstanced = new THREE.InstancedMesh(lampGeo, lampMat, count);
+    positions.forEach((p, i) => {
+      dummy.position.set(p.x, 3.5, p.z);
+      dummy.updateMatrix();
+      this.lampPoleInstanced.setMatrixAt(i, dummy.matrix);
+    });
+    this.lampPoleInstanced.instanceMatrix.needsUpdate = true;
+    this.lampPoleInstanced.frustumCulled = true;
+    this.scene.add(this.lampPoleInstanced);
+
+    // Head instanced mesh
+    this.lampHeadInstanced = new THREE.InstancedMesh(headGeo, headMat, count);
+    positions.forEach((p, i) => {
+      dummy.position.set(p.x, 7, p.z);
+      dummy.updateMatrix();
+      this.lampHeadInstanced.setMatrixAt(i, dummy.matrix);
+    });
+    this.lampHeadInstanced.instanceMatrix.needsUpdate = true;
+    this.lampHeadInstanced.frustumCulled = true;
+    this.scene.add(this.lampHeadInstanced);
   }
 
   _addTrees() {
@@ -153,17 +171,30 @@ export class StreetSystem {
       { x: 14, z: -100 }, { x: 14, z: -50 }, { x: 14, z: 0 }, { x: 14, z: 50 },
     ];
 
-    for (const p of positions) {
-      const group = new THREE.Group();
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.position.y = 1.5;
-      group.add(trunk);
-      const leaves = new THREE.Mesh(leafGeo, leafMat);
-      leaves.position.y = 4.2;
-      group.add(leaves);
-      group.position.set(p.x, 0, p.z);
-      this.scene.add(group);
-    }
+    const count = positions.length;
+    const dummy = new THREE.Object3D();
+
+    // Trunk instanced mesh
+    this.treeTrunkInstanced = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
+    positions.forEach((p, i) => {
+      dummy.position.set(p.x, 1.5, p.z);
+      dummy.updateMatrix();
+      this.treeTrunkInstanced.setMatrixAt(i, dummy.matrix);
+    });
+    this.treeTrunkInstanced.instanceMatrix.needsUpdate = true;
+    this.treeTrunkInstanced.frustumCulled = true;
+    this.scene.add(this.treeTrunkInstanced);
+
+    // Leaves instanced mesh
+    this.treeLeafInstanced = new THREE.InstancedMesh(leafGeo, leafMat, count);
+    positions.forEach((p, i) => {
+      dummy.position.set(p.x, 4.2, p.z);
+      dummy.updateMatrix();
+      this.treeLeafInstanced.setMatrixAt(i, dummy.matrix);
+    });
+    this.treeLeafInstanced.instanceMatrix.needsUpdate = true;
+    this.treeLeafInstanced.frustumCulled = true;
+    this.scene.add(this.treeLeafInstanced);
   }
 
   _addMailboxes() {
@@ -175,19 +206,38 @@ export class StreetSystem {
     const positions = [-10.5, -9.5];
     const zs = [-95, -65, -35, -5, 25, 55, 85];
 
+    const count = positions.length * zs.length;
+    const dummy = new THREE.Object3D();
+
+    // Box instanced mesh
+    this.mailboxBoxInstanced = new THREE.InstancedMesh(boxGeo, boxMat, count);
+    let idx = 0;
     for (const bx of positions) {
       for (const z of zs) {
-        const group = new THREE.Group();
-        const box = new THREE.Mesh(boxGeo, boxMat);
-        box.position.y = 0.55;
-        group.add(box);
-        const flag = new THREE.Mesh(flagGeo, flagMat);
-        flag.position.set(0.35, 0.85, 0);
-        group.add(flag);
-        group.position.set(bx, 0, z);
-        this.scene.add(group);
+        dummy.position.set(bx, 0.55, z);
+        dummy.updateMatrix();
+        this.mailboxBoxInstanced.setMatrixAt(idx, dummy.matrix);
+        idx++;
       }
     }
+    this.mailboxBoxInstanced.instanceMatrix.needsUpdate = true;
+    this.mailboxBoxInstanced.frustumCulled = true;
+    this.scene.add(this.mailboxBoxInstanced);
+
+    // Flag instanced mesh
+    this.mailboxFlagInstanced = new THREE.InstancedMesh(flagGeo, flagMat, count);
+    idx = 0;
+    for (const bx of positions) {
+      for (const z of zs) {
+        dummy.position.set(bx + 0.35, 0.85, z);
+        dummy.updateMatrix();
+        this.mailboxFlagInstanced.setMatrixAt(idx, dummy.matrix);
+        idx++;
+      }
+    }
+    this.mailboxFlagInstanced.instanceMatrix.needsUpdate = true;
+    this.mailboxFlagInstanced.frustumCulled = true;
+    this.scene.add(this.mailboxFlagInstanced);
   }
 
   // Follow camera behind and above the character, looking down the street.
