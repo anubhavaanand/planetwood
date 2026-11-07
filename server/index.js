@@ -1,11 +1,30 @@
+import { createServer as createHttpServer } from 'http';
+import { createServer as createHttpsServer } from 'https';
 import { WebSocketServer } from 'ws';
 import * as protobuf from 'protobufjs';
 import { randomBytes } from 'crypto';
+import {
+  getPort,
+  getTlsOptions,
+  getScheme,
+  getWsUrl,
+  isProduction,
+} from './config/tls.js';
+import { logger } from './utils/logger.js';
+import { sendError, ErrorCodes } from './middleware/errors.js';
+import { authenticateUpgrade, generateToken, verifyToken } from './middleware/auth.js';
+import { checkLimit } from './middleware/rateLimit.js';
+import {
+  validateMessage,
+  MAX_BINARY_PAYLOAD_BYTES,
+  sanitizeString,
+} from './middleware/validate.js';
 
-const PORT = 3005;
 const MAX_PLAYERS = 15;
 const UPDATE_RATE = 1000 / 35;
 const PING_RATE = 1000 / 20;
+const PORT = getPort();
+const GRACE_PERIOD_MS = 5000;
 
 let RealmData = null;
 protobuf.load('src/proto/realm.proto').then(root => {
@@ -51,6 +70,7 @@ class Client {
       networkEvent: '',
     };
     this.lastSeen = Date.now();
+    this.requestId = logger.generateRequestId();
   }
 
   get displayNameProp() { return this.data.tag || this.displayName; }
@@ -125,7 +145,45 @@ function cleanupLastKnownPositions() {
 }
 setInterval(cleanupLastKnownPositions, LAST_KNOWN_CLEANUP_MS);
 
-const wss = new WebSocketServer({ port: PORT });
+// Build the underlying HTTP/HTTPS server and attach the WebSocket server.
+// Production (NODE_ENV=production): requires TLS_CERT_PATH + TLS_KEY_PATH → WSS.
+// Dev: self-signed cert generated on first run → WSS; falls back to plain WS if cert generation fails.
+const tlsOptions = isProduction() ? getTlsOptions() : getTlsOptions();
+const httpServer = tlsOptions
+  ? createHttpsServer(tlsOptions)
+  : createHttpServer();
+const wss = new WebSocketServer({ server: httpServer });
+
+// Shutdown state
+let shuttingDown = false;
+let shutdownTimeout = null;
+
+// /health endpoint — HTTP GET returns { status, uptime, clients, rooms }
+httpServer.on('request', (req, res) => {
+  if (req.url === '/health' && req.method === 'GET') {
+    let clientCount = 0;
+    for (const room of rooms.values()) {
+      clientCount += room.clients.size;
+    }
+    const body = JSON.stringify({
+      status: 'ok',
+      uptime: process.uptime(),
+      clients: clientCount,
+      rooms: rooms.size,
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(body);
+    return;
+  }
+  // Not found for any other path
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'not found' }));
+});
+
+httpServer.listen(PORT, () => {
+  const scheme = getScheme(tlsOptions);
+  logger.info(`Planetwood relay running on ${scheme}://localhost:${PORT}`);
+});
 
 function getOrCreateRoom(name) {
   if (!rooms.has(name)) rooms.set(name, new Room(name));
@@ -137,7 +195,7 @@ function sendProtobufToClient(client, dataObj) {
   const verification = RealmData.verify(dataObj);
   if (verification) {
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('protobuf verify error', verification);
+      logger.warn('protobuf verify error', { requestId: client.requestId, verification });
     }
     return;
   }
@@ -155,7 +213,7 @@ function broadcastRealmData(room, excludeId, dataObj) {
   const verification = RealmData.verify(dataObj);
   if (verification) {
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('protobuf verify error', verification);
+      logger.warn('protobuf verify error', { requestId: excludeId, verification });
     }
     return;
   }
@@ -172,26 +230,197 @@ function broadcastRealmData(room, excludeId, dataObj) {
   }
 }
 
-wss.on('connection', (ws) => {
+/**
+ * Graceful shutdown: stop accepting new connections, notify all clients,
+ * close sockets after grace period, then exit process.
+ */
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  logger.warn('Shutdown initiated', { reason: 'signal' });
+
+  // Stop accepting new WebSocket connections.
+  try {
+    wss.close(() => {
+      logger.info('WebSocket server stopped accepting new connections');
+    });
+  } catch (err) {
+    logger.error('Error closing WebSocket server', { requestId: null, error: err.message });
+  }
+
+  // Notify all connected clients of impending shutdown.
+  const shutdownEnvelope = JSON.stringify({
+    type: 'error',
+    payload: {
+      code: ErrorCodes.SERVER_SHUTDOWN,
+      message: 'Server is shutting down',
+      timestamp: new Date().toISOString(),
+    },
+  });
+  for (const [id, client] of wss.clients) {
+    if (client.ws.readyState === 1) {
+      try {
+        client.ws.send(shutdownEnvelope);
+      } catch {
+        // Best-effort notification.
+      }
+    }
+  }
+
+  // After grace period, close all client sockets, close HTTP server, exit.
+  shutdownTimeout = setTimeout(() => {
+    logger.warn('Grace period elapsed — closing all client sockets', {
+      clientCount: wss.clients.size,
+    });
+    for (const [id, client] of wss.clients) {
+      try {
+        if (client.ws.readyState === 1) {
+          client.ws.close(1001, 'Server shutting down');
+        }
+      } catch {
+        // Ignore close errors.
+      }
+    }
+    try {
+      httpServer.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+      });
+    } catch {
+      process.exit(0);
+    }
+    // Fallback exit if httpServer.close never completes.
+    setTimeout(() => process.exit(1), 2000);
+  }, GRACE_PERIOD_MS);
+}
+
+function handleSignal(signal) {
+  logger.info(`Received ${signal} — beginning graceful shutdown`, { signal });
+  shutdown();
+}
+
+process.on('SIGTERM', () => handleSignal('SIGTERM'));
+process.on('SIGINT', () => handleSignal('SIGINT'));
+
+// Uncaught exception / unhandled rejection: structured logging + controlled exit.
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { requestId: null, error: err.message, stack: err.stack });
+  if (shutdownTimeout) clearTimeout(shutdownTimeout);
+  shutdown();
+  setTimeout(() => process.exit(1), 3000);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection', { requestId: null, reason: String(reason) });
+});
+
+wss.on('connection', (ws, req) => {
+  if (shuttingDown) {
+    sendError(ws, ErrorCodes.SERVER_SHUTDOWN, 'Server is shutting down');
+    return;
+  }
+
   if (wss.clients.size >= MAX_PLAYERS) {
-    ws.send(JSON.stringify({ type: 'error', payload: { code: 'SESSION_FULL', message: 'Session at max capacity' } }));
-    ws.close();
+    sendError(ws, ErrorCodes.SESSION_FULL, 'Session at max capacity');
+    return;
+  }
+
+  // Connection rate limit per IP address.
+  const clientIp = req.socket?.remoteAddress
+    || (typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0].trim()
+      : undefined)
+    || 'unknown';
+  const connectionLimit = checkLimit(clientIp, 'connection');
+  if (!connectionLimit.allowed) {
+    sendError(ws, ErrorCodes.RATE_LIMITED, 'Connection rate limit exceeded', {
+      closeCode: 4003,
+      closeReason: `Retry after ${connectionLimit.retryAfter}s`,
+    });
+    return;
+  }
+
+  // Authentication: require valid JWT on WebSocket upgrade.
+  // Token from Authorization: Bearer <token> header or ?token=<token> query param.
+  const authResult = authenticateUpgrade(req);
+  if (!authResult.ok) {
+    const isExpired = authResult.reason === 'AUTH_EXPIRED';
+    sendError(ws, ErrorCodes.AUTH_REQUIRED, isExpired ? 'Token expired' : 'Authentication required', {
+      closeCode: 4001,
+    });
     return;
   }
 
   const client = new Client(ws);
+  client.auth = authResult.auth; // { id, displayName, room, token }
+  logger.setRequestId(client.requestId);
   let room = null;
   let connected = false;
 
-  ws.send(JSON.stringify({ id: client.id }));
+  // Send client id and issued JWT token after successful authentication.
+  ws.send(JSON.stringify({ id: client.id, token: client.auth.token }));
   if (process.env.NODE_ENV !== 'production') {
-    console.log(`[connect] ${client.displayName} (${client.id})`);
+    logger.info('[connect]', { requestId: client.requestId, name: client.displayName, id: client.id });
   }
 
   ws.on('message', (raw) => {
+    if (shuttingDown) {
+      sendError(ws, ErrorCodes.SERVER_SHUTDOWN, 'Server is shutting down');
+      return;
+    }
+
+    // Require a valid JWT for all message handling. Token may be sent with
+    // the message (msg.token) or rely on the one stored on the client object
+    // from the upgrade handshake.
+    let messageToken = null;
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw.toString());
+        if (parsed && typeof parsed === 'object' && parsed.token) {
+          messageToken = parsed.token;
+        }
+      } catch {
+        // Not JSON; fall through to client.auth token below.
+      }
+    }
+    const tokenToVerify = messageToken || (client.auth && client.auth.token);
+    if (!tokenToVerify) {
+      sendError(ws, ErrorCodes.AUTH_INVALID, 'Authentication token missing', {
+        closeCode: 4002,
+      });
+      return;
+    }
+    try {
+      verifyToken(tokenToVerify);
+    } catch {
+      sendError(ws, ErrorCodes.AUTH_INVALID, 'Authentication token invalid', {
+        closeCode: 4002,
+      });
+      return;
+    }
+
+    // Message rate limit per client ID (applies to all message types).
+    const messageLimit = checkLimit(client.id, 'message');
+    if (!messageLimit.allowed) {
+      sendError(ws, ErrorCodes.RATE_LIMITED, 'Message rate limit exceeded', {
+        requestId: client.requestId,
+        closeCode: 4003,
+        closeReason: `Retry after ${messageLimit.retryAfter}s`,
+      });
+      return;
+    }
+
     if (typeof raw !== 'string') {
       // Binary protobuf message: [localID bytes][RealmData bytes]
       if (!client.id) return;
+      // Reject oversized binary payloads before any decode/allocation.
+      if (raw.byteLength > MAX_BINARY_PAYLOAD_BYTES) {
+        sendError(ws, ErrorCodes.VALIDATION_ERROR, 'Binary payload exceeds maximum size', {
+          requestId: client.requestId,
+        });
+        return;
+      }
       const idBytes = new TextEncoder().encode(client.id);
       if (raw.byteLength <= idBytes.length) return;
       const payloadBytes = new Uint8Array(raw).slice(idBytes.length);
@@ -233,8 +462,22 @@ wss.on('connection', (ws) => {
     try {
       msg = JSON.parse(raw.toString());
     } catch {
+      sendError(ws, ErrorCodes.PROTOCOL_ERROR, 'Invalid JSON message', { requestId: client.requestId });
       return;
     }
+
+    // Validate the parsed control message against its schema before processing.
+    const validation = validateMessage(msg);
+    if (!validation.valid) {
+      sendError(ws, ErrorCodes.VALIDATION_ERROR, 'Invalid message schema', {
+        requestId: client.requestId,
+        message: validation.errors.join('; '),
+      });
+      return;
+    }
+
+    // Sanitize all string fields before use.
+    msg = sanitizeObject(msg);
 
     if (msg.r && Array.isArray(msg.r) && !connected) {
       // Join room: {r: [prefix, roomName]}
@@ -260,7 +503,7 @@ wss.on('connection', (ws) => {
 
       ws.send(JSON.stringify({ r: room.id, restorePos, restoreRot }));
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[join] ${client.displayName} (${client.id}) -> ${room.id}`);
+        logger.info('[join]', { requestId: client.requestId, name: client.displayName, id: client.id, room: room.id });
       }
 
       // Notify existing clients about new client
@@ -299,7 +542,16 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.data) {
-      // Chat message broadcast
+      // Chat message broadcast — stricter chat rate limit per client.
+      const chatLimit = checkLimit(client.id, 'chat');
+      if (!chatLimit.allowed) {
+        sendError(ws, ErrorCodes.RATE_LIMITED, 'Chat rate limit exceeded', {
+          requestId: client.requestId,
+          closeCode: 4003,
+          closeReason: `Retry after ${chatLimit.retryAfter}s`,
+        });
+        return;
+      }
       room.broadcastJson(client.id, {
         data: {
           sender: client.id,
@@ -347,9 +599,10 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     saveLastKnownPosition(client);
+    logger.clearRequestId();
     if (room) {
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[leave] ${client.displayName} (${client.id}) from ${room.id}`);
+        logger.info('[leave]', { requestId: client.requestId, name: client.displayName, id: client.id, room: room.id });
       }
       room.remove(client.id);
       room.broadcastJson(client.id, {
@@ -367,14 +620,16 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('error', () => {
+  ws.on('error', (err) => {
     saveLastKnownPosition(client);
+    logger.error('WebSocket error', { requestId: client.requestId, error: err.message });
     if (room) room.remove(client.id);
   });
 });
 
 // Periodic ping to all clients
 setInterval(() => {
+  if (shuttingDown) return;
   const now = Date.now();
   for (const room of rooms.values()) {
     for (const [id, client] of room.clients) {
@@ -387,6 +642,7 @@ setInterval(() => {
 
 // Cleanup stale clients
 setInterval(() => {
+  if (shuttingDown) return;
   const now = Date.now();
   for (const room of rooms.values()) {
     for (const [id, client] of room.clients) {
@@ -396,7 +652,3 @@ setInterval(() => {
     }
   }
 }, 5000);
-
-if (process.env.NODE_ENV !== 'production') {
-  console.log(`Planetwood relay running on ws://localhost:${PORT}`);
-}
