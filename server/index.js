@@ -261,6 +261,40 @@ wss.on('connection', (ws) => {
         },
       });
     }
+
+    if (msg.type === 'signal' && msg.payload) {
+      // Forward WebRTC signaling data to target peer
+      const { to, data } = msg.payload;
+      const target = room.clients.get(to);
+      if (target && target.ws.readyState === 1) {
+        target.ws.send(JSON.stringify({
+          type: 'signal',
+          payload: { from: client.id, data },
+        }));
+      }
+      return;
+    }
+
+    if (msg.type === 'peer_joined') {
+      // Notify room that a new peer is ready for P2P signaling
+      room.broadcastJson(client.id, {
+        type: 'peer_joined',
+        payload: {
+          id: client.id,
+          displayName: client.displayNameProp,
+          position: client.data.p || [0, 2, 0],
+        },
+      });
+      return;
+    }
+
+    if (msg.type === 'peer_left') {
+      room.broadcastJson(client.id, {
+        type: 'peer_left',
+        payload: { id: client.id },
+      });
+      return;
+    }
   });
 
   ws.on('close', () => {

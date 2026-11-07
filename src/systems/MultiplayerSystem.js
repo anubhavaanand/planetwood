@@ -65,6 +65,18 @@ export class MultiplayerSystem {
 
     this.socket = null;
     this.socketCreated = false;
+    // WebRTC P2P
+    this.peerConnections = new Map();
+    this.dataChannels = new Map();
+    this.pendingCandidates = new Map();
+    this.p2pEstablished = new Set();
+    this.p2pFallbackTimers = new Map();
+    this.iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ];
+    this._pcConfig = { iceServers: this.iceServers };
     this._boundOpen = this._open.bind(this);
     this._boundMessage = this._message.bind(this);
     this._boundClose = this._close.bind(this);
@@ -197,6 +209,21 @@ export class MultiplayerSystem {
         if (!this.clients.has(json.leave)) return;
         this.clients.delete(json.leave);
         this._removeClient(json.leave);
+      } else if (json.type === 'signal') {
+        // WebRTC signaling relayed through WebSocket
+        const { from, data } = json.payload || {};
+        if (from && data) {
+          this._handleSignaling(from, data);
+        }
+      } else if (json.type === 'peer_joined') {
+        // Remote peer joined — initiate P2P connection
+        const { id } = json.payload || {};
+        if (id && id !== this.localID) {
+          this._createPeerConnection(id, true);
+        }
+      } else if (json.type === 'peer_left') {
+        const { id } = json.payload || {};
+        if (id) this._closePeerConnection(id);
       }
     } catch {}
   }
@@ -226,12 +253,33 @@ export class MultiplayerSystem {
   _relay(force = false) {
     if (force) {
       this._prevData = JSON.stringify(this._data);
-      this._sendRelayedData(JSON.parse(this._prevData));
+      this._sendP2POrRelay(JSON.parse(this._prevData));
     } else {
       const changed = this._retrieveChangedData();
       if (Object.keys(changed).length === 0) return;
       this._prevData = JSON.stringify(this._data);
-      this._sendRelayedData(changed);
+      this._sendP2POrRelay(changed);
+    }
+  }
+
+  // Send via P2P data channels to peers that have them open,
+  // falling back to WebSocket relay for peers without P2P.
+  _sendP2POrRelay(obj) {
+    let sentP2P = false;
+    const bytes = this._encodeRelayData(obj);
+    if (bytes) {
+      for (const [peerId, dc] of this.dataChannels) {
+        if (dc.readyState === 'open') {
+          dc.send(bytes);
+          sentP2P = true;
+        }
+      }
+    }
+
+    // WebSocket relay as fallback for peers without an open P2P channel,
+    // or when P2P is not yet established.
+    if (!sentP2P || this.dataChannels.size === 0) {
+      this._sendRelayedData(obj);
     }
   }
 
@@ -256,8 +304,206 @@ export class MultiplayerSystem {
     this.socket.send(combined);
   }
 
+  // =========================================================================
+  // WebRTC P2P Data Channel support
+  // =========================================================================
+
+  _createPeerConnection(peerId, isInitiator) {
+    if (this.peerConnections.has(peerId)) return;
+
+    const pc = new RTCPeerConnection(this._pcConfig);
+
+    this.peerConnections.set(peerId, pc);
+
+    pc.ondatachannel = (event) => {
+      const dc = event.channel;
+      this.dataChannels.set(peerId, dc);
+      this._setupDataChannel(peerId, dc);
+    };
+
+    if (isInitiator) {
+      const dc = pc.createDataChannel('state', { ordered: true });
+      this.dataChannels.set(peerId, dc);
+      this._setupDataChannel(peerId, dc);
+
+      pc.createOffer()
+        .then(offer => pc.setLocalDescription(offer))
+        .then(() => this._sendSignal(peerId, {
+          type: 'offer',
+          sdp: pc.localDescription,
+        }))
+        .catch(err => this._log(`createOffer error for ${peerId}`, err));
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        this._sendSignal(peerId, { type: 'candidate', candidate: event.candidate });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        this._fallbackToRelay(peerId);
+        this._log(`P2P connection ${peerId} state: ${pc.connectionState}`);
+      }
+    };
+
+    pc.ontrack = () => {}; // reserved — no media tracks used
+  }
+
+  _setupDataChannel(peerId, dc) {
+    dc.onopen = () => {
+      this.p2pEstablished.add(peerId);
+      this.p2pFallbackTimers.delete(peerId);
+      this._log(`P2P established with ${peerId}`);
+      // Force a full state sync once P2P is up
+      this._relay(true);
+    };
+
+    dc.onerror = (e) => {
+      this._log(`P2P error with ${peerId}`, e);
+    };
+
+    dc.onclose = () => {
+      this.p2pEstablished.delete(peerId);
+      this._fallbackToRelay(peerId);
+    };
+
+    dc.onmessage = (event) => {
+      if (typeof event.data === 'string') {
+        // JSON signaling/chat over data channel
+        try {
+          const msg = JSON.parse(event.data);
+          this._handleDataChannelMessage(peerId, msg);
+        } catch {}
+        return;
+      }
+      // Binary protobuf state sync: [localID bytes][RealmData bytes]
+      try {
+        const decoder = new TextDecoder();
+        const localIdStr = decoder.decode(event.data.slice(0, this.localIDLength));
+        const msg = RealmData.decode(new Uint8Array(event.data.slice(this.localIDLength)));
+        const keys = Object.keys(msg);
+        const client = this.clients.get(localIdStr);
+        if (client) {
+          client.lastSeenAt = Date.now();
+          keys.forEach(k => {
+            if (msg[k] instanceof Array && msg[k].length === 0) return;
+            client[k] = msg[k];
+          });
+        }
+      } catch {}
+    };
+  }
+
+  _handleSignaling(peerId, data) {
+    let pc = this.peerConnections.get(peerId);
+    if (!pc) {
+      // Peer initiated connection — accept it
+      this._createPeerConnection(peerId, false);
+      pc = this.peerConnections.get(peerId);
+      if (!pc) return;
+    }
+
+    if (data.type === 'offer') {
+      pc.setRemoteDescription(new RTCSessionDescription(data))
+        .then(() => pc.createAnswer())
+        .then(answer => pc.setLocalDescription(answer))
+        .then(() => this._sendSignal(peerId, {
+          type: 'answer',
+          sdp: pc.localDescription,
+        }))
+        .catch(err => this._log(`handle offer error for ${peerId}`, err));
+    } else if (data.type === 'answer') {
+      pc.setRemoteDescription(new RTCSessionDescription(data))
+        .catch(err => this._log(`handle answer error for ${peerId}`, err));
+    } else if (data.type === 'candidate') {
+      pc.addIceCandidate(new RTCIceCandidate(data.candidate))
+        .catch(err => this._log(`addIceCandidate error for ${peerId}`, err));
+    }
+  }
+
+  _sendSignal(peerId, data) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: 'signal', payload: { to: peerId, data } }));
+    }
+  }
+
+  _fallbackToRelay(peerId) {
+    if (this.p2pFallbackTimers.has(peerId)) return;
+    this.p2pFallbackTimers.set(peerId, setTimeout(() => {
+      this.p2pFallbackTimers.delete(peerId);
+      // Mark peer as relay-only; state sync will go through WebSocket relay
+      this._log(`Falling back to WebSocket relay for ${peerId}`);
+    }, 1000));
+  }
+
+  _closePeerConnection(peerId) {
+    this.p2pEstablished.delete(peerId);
+    const timer = this.p2pFallbackTimers.get(peerId);
+    if (timer) clearTimeout(timer);
+    this.p2pFallbackTimers.delete(peerId);
+    const dc = this.dataChannels.get(peerId);
+    if (dc) {
+      dc.close();
+      this.dataChannels.delete(peerId);
+    }
+    const pc = this.peerConnections.get(peerId);
+    if (pc) {
+      pc.close();
+      this.peerConnections.delete(peerId);
+    }
+  }
+
+  _handleDataChannelMessage(peerId, msg) {
+    if (msg.type === 'state') {
+      const client = this.clients.get(peerId);
+      if (client) {
+        client.lastSeenAt = Date.now();
+        if (msg.p) client.p = msg.p;
+        if (msg.r) client.r = msg.r;
+        if (msg.animation !== undefined) client.animation = msg.animation;
+        if (msg.medium !== undefined) client.medium = msg.medium;
+        if (msg.tag !== undefined) client.tag = msg.tag;
+        if (msg.networkEvent !== undefined) client.networkEvent = msg.networkEvent;
+      }
+    } else if (msg.type === 'chat') {
+      if (this.onChatMessage) {
+        this.onChatMessage({
+          senderId: peerId,
+          senderName: this.clients.get(peerId)?.tag || 'Player',
+          text: msg.text || '',
+          timestamp: msg.timestamp || Date.now(),
+        });
+      }
+    } else if (msg.type === 'emote') {
+      if (this.onEmote) this.onEmote(peerId, msg.emote);
+    }
+  }
+
+  // Send state via P2P data channel if available, else WebSocket relay
+  _encodeRelayData(obj) {
+    try {
+      const verification = RealmData.verify(obj);
+      if (verification) return null;
+      const msg = RealmData.create(obj);
+      const bytes = RealmData.encode(msg).finish();
+      const prefix = this.localID ? new TextEncoder().encode(this.localID) : new Uint8Array(0);
+      const combined = new Uint8Array(prefix.length + bytes.length);
+      combined.set(prefix, 0);
+      combined.set(bytes, prefix.length);
+      return combined;
+    } catch {
+      return null;
+    }
+  }
+
   _addClient(id, data) {
     if (this.players.has(id)) return;
+
+    // Initiate P2P connection to the newly discovered peer
+    this._createPeerConnection(id, true);
+
     const position = data.p && data.p.length === 3 ? new THREE.Vector3().fromArray(data.p) : new THREE.Vector3(0, 2, 0);
     const rotation = data.r && data.r.length === 3 ? new THREE.Euler().fromArray(data.r) : new THREE.Euler();
 
@@ -349,12 +595,28 @@ export class MultiplayerSystem {
       this.players.delete(id);
     }
     if (this.onPlayerLeft) this.onPlayerLeft(id);
+
+    // Close P2P connection to the departed peer
+    this._closePeerConnection(id);
   }
 
-  _sendSignal(to, data) {
-    if (this.socket?.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({ type: 'signal', payload: { to, data } }));
+  disconnect() {
+    if (this._updateInterval) clearInterval(this._updateInterval);
+    if (this._pingInterval) clearInterval(this._pingInterval);
+    if (this._relayInterval) clearInterval(this._relayInterval);
+    if (this._retryInterval) clearInterval(this._retryInterval);
+    // Close all P2P connections
+    for (const peerId of this.peerConnections.keys()) {
+      this._closePeerConnection(peerId);
     }
+    const socket = this.socket;
+    this.socket = null;
+    if (socket) socket.close();
+    for (const avatar of this.players.values()) {
+      this.scene.remove(avatar.group);
+    }
+    this.players.clear();
+    this.connected = false;
   }
 
   _startSync() {
@@ -416,6 +678,10 @@ export class MultiplayerSystem {
     if (this._pingInterval) clearInterval(this._pingInterval);
     if (this._relayInterval) clearInterval(this._relayInterval);
     if (this._retryInterval) clearInterval(this._retryInterval);
+    // Close all P2P connections
+    for (const peerId of this.peerConnections.keys()) {
+      this._closePeerConnection(peerId);
+    }
     const socket = this.socket;
     this.socket = null;
     if (socket) socket.close();
