@@ -12,8 +12,10 @@ import { ChatSystem } from './systems/ChatSystem.js';
 import { UISystem } from './systems/UISystem.js';
 import { QuestSystem } from './systems/QuestSystem.js';
 import { QuestUI } from './systems/QuestUI.js';
+import { DeliveryItemSystem } from './systems/DeliveryItemSystem.js';
 import { DialogueSystem } from './systems/DialogueSystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
+import { AvatarCustomizationSystem } from './systems/AvatarCustomizationSystem.js';
 import { ProgressionSystem } from './systems/ProgressionSystem.js';
 import { QUESTS } from './data/quests.js';
 
@@ -30,14 +32,17 @@ const animSys = new AnimationSystem();
 const meshLoader = new MeshLoader();
 const streetSys = new StreetSystem(sceneSys.scene);
 const planetSys = new PlanetSystem(sceneSys.scene);
+let planetSysReady = false;
 
 let playerAvatar = null;
+let avatarCustomization = null;
 let npcSys = null;
 let input = null;
 let multiplayer = null;
 let chatSys = null;
 let ui = null;
 let questUI = null;
+let deliveryItemSys = null;
 let dialogueSys = null;
 let questSys = null;
 let fallbackTimer = null;
@@ -73,6 +78,15 @@ const NPC_STREET_POS = {
   'mountainman': { x: -10, z: 80 },
   'diver': { x: -10, z: -120 },
   'musician': { x: 10, z: -100 },
+  // Missing NPC types added (Issue #48)
+  'alien': { x: -10, z: -95 },
+  'chef': { x: 10, z: -75 },
+  'fox': { x: -10, z: -50 },
+  'owl': { x: 10, z: -25 },
+  'scout': { x: 10, z: 30 },
+  'threekid': { x: -10, z: 20 },
+  'factory-worker-b': { x: -10, z: 130 },
+  'factory-worker-c': { x: 10, z: 70 },
 };
 
 async function init() {
@@ -98,6 +112,11 @@ async function initCore() {
   const animData = await sceneSys.loadAnimData('./decoded_animations.json');
   updateLoading('Animations loaded', 40);
 
+  updateLoading('Loading planet models...', 45);
+  await planetSys.init();
+  planetSysReady = true;
+  updateLoading('Planet models loaded', 50);
+
   // Load scene.gltf only to extract the NPC roster (their mesh/skeleton data).
   // The planet itself is NOT added to the scene — we render the street instead.
   updateLoading('Loading NPCs...', 55);
@@ -119,7 +138,7 @@ async function initCore() {
       playerAvatar.setSkinnedMesh(avatarMesh, skeleton);
     }
 
-    const animNames = ['idle', 'walk', 'run', 'afk1', 'afk2', 'afk3'];
+    const animNames = ['idle', 'walk', 'run', 'sprint', 'air', 'afk1', 'afk2', 'afk3'];
     for (const name of animNames) {
       const entry = animSys.findAvatarAnim(animData, name);
       if (entry && playerAvatar.skeleton) {
@@ -132,9 +151,15 @@ async function initCore() {
       }
     }
     playerAvatar.playAnimation('idle');
-  }
 
-  sceneSys.scene.add(playerAvatar.group);
+    // Avatar customization system — mix-and-match accessories persisted to localStorage.
+    avatarCustomization = new AvatarCustomizationSystem(playerAvatar, meshLoader, animSys, animData);
+    await avatarCustomization.load();
+
+    _setupCustomizationUI();
+
+    sceneSys.scene.add(playerAvatar.group);
+  }
 
   // Camera: fixed perspective following behind the messenger (2.5D street view).
   sceneSys.camera.position.set(0, 5, -8);
@@ -145,9 +170,31 @@ async function initCore() {
   chatSys = new ChatSystem();
   ui = new UISystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
   questUI = new QuestUI(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
+  deliveryItemSys = new DeliveryItemSystem(
+    sceneSys.scene, sceneSys.camera, sceneSys.renderer,
+    playerAvatar, meshLoader
+  );
   dialogueSys = new DialogueSystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
   progressionSys = new ProgressionSystem();
+  progressionSys.load();
   questSys = new QuestSystem(questUI, progressionSys);
+
+  // Wire quest receipt/delivery events to the delivery item system.
+  questSys.onItemReceived = (extraData, stepId, questId) => {
+    const modelId = extraData?.receiveModel;
+    if (modelId && deliveryItemSys) {
+      deliveryItemSys.receiveItem(modelId, stepId, questId);
+      ui.addNotification(`Received: ${extraData.uiTitle || 'Item'}`);
+      srAnnounce(`Received: ${extraData.uiTitle || 'Item'}`, 'polite');
+      if (extraData.uiText) ui.addNotification(extraData.uiText);
+    }
+  };
+  questSys.onItemDelivered = (modelId, stepId, questId) => {
+    if (modelId && deliveryItemSys) {
+      deliveryItemSys.deliverItem(modelId);
+      ui.addNotification('Delivered.');
+    }
+  };
 
   // Multiplayer system — connects to the WebSocket relay for cross-player presence.
   multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
@@ -240,12 +287,7 @@ async function initCore() {
     }
   };
 
-  questUI.onItemReceived = (extraData) => {
-    ui.addNotification(`Received: ${extraData.uiTitle || 'Item'}`);
-    srAnnounce(`Received: ${extraData.uiTitle || 'Item'}`, 'polite');
-    if (extraData.uiText) ui.addNotification(extraData.uiText);
-  };
-  questUI.onQuestCompleted = (questId) => {
+  questSys.onQuestCompleted = (questId) => {
     ui.addNotification('Quest completed!');
     srAnnounce('Quest completed!', 'polite');
   };
@@ -309,6 +351,7 @@ async function initCore() {
       npc.group.lookAt(streetPos.x, 0, streetPos.z + 1);
     }
     ui.addNameplate(npc, npc.displayName);
+    ui.addInteractPrompt(npc);
     if (questSys) questSys.registerNpc(npc);
   }
 
@@ -460,6 +503,109 @@ function srAnnounce(text, politeness = 'polite') {
   }
 }
 
+function _setupCustomizationUI() {
+  const container = document.createElement('div');
+  container.id = 'avatar-customization';
+  Object.assign(container.style, {
+    position: 'fixed', top: '16px', left: '16px',
+    width: '260px', zIndex: '350',
+    fontFamily: 'system-ui, sans-serif',
+  });
+
+  const card = document.createElement('div');
+  Object.assign(card.style, {
+    background: 'rgba(30,40,42,0.9)', border: '1px solid rgba(217,147,106,0.4)',
+    borderRadius: '10px', padding: '14px', boxSizing: 'border-box',
+    backdropFilter: 'blur(6px)',
+  });
+
+  const title = document.createElement('div');
+  title.textContent = 'Avatar';
+  Object.assign(title.style, {
+    fontSize: '15px', fontWeight: '700', color: '#e8dccc',
+    marginBottom: '10px', textAlign: 'center', letterSpacing: '0.05em',
+  });
+
+  const slots = [
+    { key: 'hair', label: 'Hair', prefix: 'hair', max: 7 },
+    { key: 'top', label: 'Top', prefix: 'top', max: 9 },
+    { key: 'bottom', label: 'Bottom', prefix: 'bottom', max: 7 },
+    { key: 'shoes', label: 'Shoes', prefix: 'shoes', max: 7 },
+  ];
+
+  const selects = {};
+  slots.forEach(({ key, label, prefix, max }) => {
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex', alignItems: 'center', gap: '8px',
+      marginBottom: '10px', flexWrap: 'wrap',
+    });
+
+    const labelEl = document.createElement('label');
+    labelEl.textContent = label;
+    Object.assign(labelEl.style, {
+      color: '#c8d4d8', fontSize: '13px', minWidth: '52px', flexShrink: '0',
+    });
+
+    const select = document.createElement('select');
+    select.id = `avatar-slot-${key}`;
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'None';
+    select.appendChild(none);
+    for (let i = 1; i <= max; i++) {
+      const opt = document.createElement('option');
+      opt.value = `${prefix}${i}`;
+      opt.textContent = `${prefix}${i}`;
+      select.appendChild(opt);
+    }
+    Object.assign(select.style, {
+      flex: '1', minWidth: '120px', padding: '6px 8px', borderRadius: '6px',
+      border: '1px solid rgba(217,147,106,0.4)', background: 'rgba(60,72,74,0.6)',
+      color: '#e8dccc', fontSize: '13px', outline: 'none',
+    });
+
+    // Restore saved value
+    const saved = avatarCustomization.equippedId(key);
+    if (saved) select.value = saved;
+
+    select.addEventListener('change', async () => {
+      await avatarCustomization.equip(key, select.value || null);
+      // announce only real changes
+      if (select.value) ui.addNotification(`Equipped ${select.value}`);
+    });
+
+    selects[key] = select;
+    row.appendChild(labelEl);
+    row.appendChild(select);
+    card.appendChild(row);
+  });
+
+  // Reset button
+  const resetBtn = document.createElement('button');
+  resetBtn.textContent = 'Reset to default';
+  Object.assign(resetBtn.style, {
+    marginTop: '6px', padding: '6px 12px', borderRadius: '6px', border: 'none',
+    background: 'rgba(217,147,106,0.2)', color: '#d9936a', fontSize: '12px',
+    cursor: 'pointer', width: '100%',
+  });
+  resetBtn.addEventListener('click', async () => {
+    for (const [key, select] of Object.entries(selects)) {
+      select.value = '';
+      await avatarCustomization.equip(key, null);
+    }
+    ui.addNotification('Avatar reset');
+  });
+  card.appendChild(resetBtn);
+
+  container.appendChild(title);
+  container.appendChild(card);
+  document.body.appendChild(container);
+
+  // Expose so the avatar system can refresh selects if loaded asynchronously
+  window._avatarCustomizationSelects = selects;
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = sceneSys.clock.getDelta();
@@ -475,7 +621,8 @@ function animate() {
         const dir = result.movement.clone().normalize();
         const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
         playerAvatar.group.quaternion.slerp(quat, 0.1);
-        playerAvatar.playAnimation('walk');
+        const isSprinting = result.keys['ShiftLeft'] || result.keys['ShiftRight'];
+        playerAvatar.playAnimation(isSprinting ? 'sprint' : 'walk');
       } else {
         if (playerAvatar.animationState !== 'wave' &&
             playerAvatar.animationState !== 'stretch' &&
@@ -513,6 +660,7 @@ function animate() {
       // Orbit camera around the player on the planet surface.
       sceneSys.controls.target.set(playerAvatar.group.position.x, playerAvatar.group.position.y, playerZ);
       sceneSys.controls.update();
+      if (planetSysReady) planetSys.update(sceneSys.camera);
     } else {
       streetSys.updateCamera(sceneSys.camera, playerAvatar.group.position);
     }
@@ -529,9 +677,22 @@ function animate() {
 
   if (npcSys && playing) npcSys.update(delta);
   if (playerAvatar && playing) playerAvatar.update(delta);
+  if (deliveryItemSys && playing) deliveryItemSys.update(delta);
 
   sceneSys.update();
   if (ui && playing) ui.cullNameplates(sceneSys.camera);
+
+  // Interact proximity prompt: show floating "E" when player is within 10 units
+  // of an NPC; hide inside the 7-unit interaction radius or beyond 10 units.
+  if (playing && !dialogueActive && playerAvatar && npcSys) {
+    const playerPos = playerAvatar.group.position;
+    for (const npc of npcSys.npcs) {
+      const d = npc.group.position.distanceTo(playerPos);
+      const show = d < 10 && d >= 7;
+      ui.setInteractPromptVisible(npc, show);
+    }
+  }
+
   sceneSys.updateFps();
   sceneSys.render();
 }

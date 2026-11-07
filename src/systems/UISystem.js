@@ -11,6 +11,7 @@ export class UISystem {
     this.onSendChat = null;
     this.onTriggerEmote = null;
     this.blockedPlayers = new Set();
+    this.interactPrompts = new Map();
     this._setupChatInput();
     this._setupChatLog();
     this._setupEmotePanel();
@@ -261,6 +262,57 @@ export class UISystem {
     entry.label.position.set(0, 2.4, 0);
   }
 
+  addInteractPrompt(entity) {
+    const existing = this.interactPrompts.get(entity.id);
+    if (existing) return existing.label;
+
+    const div = document.createElement('div');
+    div.className = 'interact-prompt';
+    div.textContent = 'E';
+    div.setAttribute('aria-label', 'Interact');
+    div.style.cssText = `
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: rgba(30, 40, 42, 0.9);
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+      backdrop-filter: blur(4px);
+      border: 1px solid #fcd436;
+      transform: translateY(-1.2em);
+      text-align: center;
+      display: none;
+    `;
+
+    const label = new CSS2DObject(div);
+    label.position.set(0, 2.9, 0);
+    entity.group.add(label);
+    this.interactPrompts.set(entity.id, { label, div });
+    return label;
+  }
+
+  removeInteractPrompt(entity) {
+    const entry = this.interactPrompts.get(entity.id);
+    if (!entry) return;
+    if (entity.group) {
+      entity.group.remove(entry.label);
+    } else if (entry.label.parent) {
+      entry.label.parent.remove(entry.label);
+    }
+    entry.div.remove();
+    this.interactPrompts.delete(entity.id);
+  }
+
+  setInteractPromptVisible(entity, visible) {
+    const entry = this.interactPrompts.get(entity.id);
+    if (!entry) return;
+    entry.div.style.display = visible ? 'block' : 'none';
+  }
+
   _setupEmotePanel() {
     this.emoteContainer = document.createElement('div');
     this.emoteContainer.id = 'emote-container';
@@ -349,5 +401,9 @@ export class UISystem {
       if (entry.div?.parentNode) entry.div.parentNode.removeChild(entry.div);
     }
     this.nameplates.clear();
+    for (const [id, entry] of this.interactPrompts) {
+      if (entry.div?.parentNode) entry.div.parentNode.removeChild(entry.div);
+    }
+    this.interactPrompts.clear();
   }
 }

@@ -101,7 +101,7 @@ export const QUESTS = [
         },
       },
       {
-        id: 'office-worker-2',
+        id: 'office-worker-completed',
         npc: 'office-worker',
         ordered: true,
         texts: [
