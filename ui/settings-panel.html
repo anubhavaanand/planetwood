@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood Settings</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: rgba(40, 52, 54, 0.95);
+      --lighter-surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --backdrop-blur: blur(8px);
+      --backdrop-bg: rgba(40, 52, 54, 0.7);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-family);
+    }
+
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      background: var(--backdrop-bg);
+      backdrop-filter: var(--backdrop-blur);
+      z-index: 499;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .backdrop { transition: none; }
+    }
+
+    .backdrop.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 400px;
+      max-height: 90vh;
+      background: var(--dark-bg);
+      border-radius: var(--radius);
+      overflow-y: auto;
+      z-index: 500;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(0.95);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .modal { transition: none; }
+    }
+
+    .modal.visible {
+      opacity: 1;
+      pointer-events: all;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .close-button {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: transparent;
+      border: none;
+      color: var(--white-text);
+      font-size: 20px;
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    .close-button:hover {
+      background: var(--border);
+    }
+
+    .content {
+      padding: 24px;
+      color: var(--white-text);
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-header {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-header::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .audio-section .control-group,
+    .graphics-section .control-group {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .audio-section label,
+    .graphics-section label {
+      flex: 1;
+      font-size: 14px;
+      color: var(--white-text);
+    }
+
+    .audio-section input[type="range"],
+    .graphics-section select {
+      flex: 0 0 150px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--border);
+      transition: .2s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--white-text);
+      transition: .2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--primary-green);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .quality-dropdown {
+      flex: 0 0 150px;
+      padding: 8px 12px;
+      background: var(--lighter-surface);
+      border: none;
+      border-radius: var(--radius);
+      color: var(--white-text);
+      font-size: 14px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 4l2 2 2-2H6z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+    }
+
+    .quality-dropdown::-ms-expand { display: none; }
+
+    .controls-section .key-binding {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .controls-section .key-binding:last-child {
+      border-bottom: none;
+    }
+
+    .controls-section .key {
+      font-weight: 600;
+      color: var(--accent-hover);
+    }
+
+    .controls-section .action {
+      color: var(--white-text);
+    }
+
+    .about-section {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted-text);
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--primary-green);
+      outline-offset: 2px;
+    }
+
+    * { user-select: none; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: var(--dark-bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+  </style>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+    <button class="close-button" aria-label="Close settings">&#x2715;</button>
+    <div class="content">
+      <section class="audio-section section">
+        <h2 class="section-header">Audio</h2>
+        <div class="control-group">
+          <label for="volume-slider">Master Volume</label>
+          <input type="range" id="volume-slider" min="0" max="100" value="80" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80" role="slider">
+        </div>
+        <div class="control-group">
+          <label for="mute-toggle">Mute</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="mute-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="graphics-section section">
+        <h2 class="section-header">Graphics</h2>
+        <div class="control-group">
+          <label for="quality-select">Quality</label>
+          <select id="quality-select">
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High" selected>High</option>
+            <option value="Ultra">Ultra</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label for="fps-toggle">Show FPS</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="fps-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="controls-section section">
+        <h2 class="section-header">Controls</h2>
+        <div class="key-binding"><span class="key">WASD</span><span class="action">Move</span></div>
+        <div class="key-binding"><span class="key">Enter</span><span class="action">Chat</span></div>
+        <div class="key-binding"><span class="key">B</span><span class="action">Emote</span></div>
+        <div class="key-binding"><span class="key">Tab</span><span class="action">Player List</span></div>
+        <div class="key-binding"><span class="key">ESC</span><span class="action">Settings</span></div>
+      </section>
+
+      <section class="about-section section">
+        <p>Planetwood v0.1.0</p>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    class SettingsPanel {
+      constructor() {
+        this.backdrop = document.querySelector('.backdrop');
+        this.modal = document.querySelector('.modal');
+        this.isOpen = false;
+        this.lastFocusedElement = null;
+        this.init();
+      }
+
+      init() {
+        document.querySelector('.close-button').addEventListener('click', () => this.close());
+        this.backdrop.addEventListener('click', () => this.close());
+
+        document.addEventListener('keydown', (e) => {
+          if (this.isOpen && e.key === 'Escape') {
+            e.preventDefault();
+            this.close();
+          }
+        });
+
+        const volumeSlider = document.getElementById('volume-slider');
+        volumeSlider.addEventListener('input', (e) => {
+          const value = parseInt(e.target.value);
+          volumeSlider.setAttribute('aria-valuenow', value);
+          document.dispatchEvent(new CustomEvent('settings:volume', { detail: { value } }));
+        });
+
+        const muteToggle = document.getElementById('mute-toggle');
+        muteToggle.addEventListener('change', (e) => {
+          document.dispatchEvent(new CustomEvent('settings:mute', { detail: { muted: e.target.checked } }));
+        });
+
+        const qualitySelect = document.getElementById('quality-select');
+        qualitySelect.addEventListener('change', (e) => {
+          document.dispatchEvent(new CustomEvent('settings:quality', { detail: { level: e.target.value } }));
+        });
+
+        const fpsToggle = document.getElementById('fps-toggle');
+        fpsToggle.addEventListener('change', (e) => {
+          document.dispatchEvent(new CustomEvent('settings:fps', { detail: { show: e.target.checked } }));
+        });
+      }
+
+      open() {
+        if (this.isOpen) return;
+        this.isOpen = true;
+        this.lastFocusedElement = document.activeElement;
+
+        this.backdrop.classList.add('visible');
+        this.modal.classList.add('visible');
+
+        this.trapFocus();
+
+        const firstFocusable = this.modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (firstFocusable) firstFocusable.focus();
+
+        this.modal.setAttribute('aria-hidden', 'false');
+      }
+
+      close() {
+        if (!this.isOpen) return;
+        this.isOpen = false;
+
+        this.backdrop.classList.remove('visible');
+        this.modal.classList.remove('visible');
+
+        if (this.lastFocusedElement) this.lastFocusedElement.focus();
+        this.modal.setAttribute('aria-hidden', 'true');
+        this.untrapFocus();
+      }
+
+      toggle() {
+        this.isOpen ? this.close() : this.open();
+      }
+
+      trapFocus() {
+        this.focusTrapListener = (e) => {
+          if (this.isOpen && e.key === 'Tab') {
+            const focusableElements = this.modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            const first = focusableElements[0];
+            const last = focusableElements[focusableElements.length - 1];
+
+            if (e.shiftKey) {
+              if (document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+              }
+            } else {
+              if (document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+              }
+            }
+          }
+        };
+        document.addEventListener('keydown', this.focusTrapListener);
+      }
+
+      untrapFocus() {
+        if (this.focusTrapListener) {
+          document.removeEventListener('keydown', this.focusTrapListener);
+          this.focusTrapListener = null;
+        }
+      }
+    }
+
+    window.SettingsPanel = new SettingsPanel();
+  </script>
+</body>
+</html>

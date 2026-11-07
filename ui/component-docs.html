@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Planetwood Component Documentation</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: #283436;
+      --surface: rgba(60, 72, 74, 0.9);
+      --lighter-surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', monospace;
+      --focus-outline: 2px solid var(--primary-green);
+      --error-red: #c0392b;
+      --warning-amber: #f39c12;
+      --success-green: #4e8c6d;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--dark-bg);
+      color: var(--white-text);
+      font-family: var(--font-body);
+      line-height: 1.6;
+    }
+
+    .doc-container {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 1.5rem;
+      height: calc(100vh - 3rem);
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+    }
+
+    .sidebar h1 {
+      font-size: 1.25rem;
+      color: var(--primary-green);
+      margin-bottom: 1rem;
+      line-height: 1.3;
+    }
+
+    .sidebar ul { list-style: none; }
+
+    .sidebar li { margin-bottom: 0.4rem; }
+
+    .sidebar a {
+      color: var(--white-text);
+      text-decoration: none;
+      font-size: 0.9rem;
+      display: block;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .sidebar a:hover,
+    .sidebar a:focus { background: rgba(78, 140, 109, 0.2); }
+    .sidebar a.active { background: rgba(78, 140, 109, 0.3); color: var(--primary-green); }
+    .sidebar a:focus-visible { outline: var(--focus-outline); outline-offset: 2px; }
+
+    .content {
+      background: var(--lighter-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 2rem;
+      overflow-y: auto;
+    }
+
+    .component {
+      scroll-margin-top: 1.5rem;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .component:last-child { border-bottom: none; margin-bottom: 0; }
+
+    .component h2 {
+      color: var(--primary-green);
+      margin-bottom: 0.5rem;
+      font-size: 1.5rem;
+    }
+
+    .component > p {
+      color: var(--muted-text);
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+    }
+
+    h3 {
+      color: var(--white-text);
+      margin: 1.5rem 0 0.75rem;
+      font-size: 1.1rem;
+    }
+
+    h4 {
+      color: var(--primary-green);
+      margin: 1rem 0 0.5rem;
+      font-size: 0.95rem;
+    }
+
+    .state-example {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .state-box {
+      background: rgba(0,0,0,0.15);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.85rem;
+      cursor: default;
+      transition: border-color 0.2s;
+    }
+
+    .state-box:hover {
+      border-color: var(--primary-green);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(0,0,0,0.2);
+      color: var(--primary-green);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    td { color: var(--white-text); }
+    td code { font-size: 0.8rem; }
+
+    .api-code {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 1rem;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+    }
+
+    .api-code code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--white-text);
+      white-space: pre;
+    }
+
+    .accessibility {
+      background: rgba(78, 140, 109, 0.1);
+      border: 1px solid rgba(78, 140, 109, 0.2);
+      border-radius: var(--radius);
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+
+    .accessibility strong { color: var(--primary-green); display: block; margin-bottom: 0.5rem; }
+
+    .accessibility ul { padding-left: 1.25rem; }
+    .accessibility li { margin-bottom: 0.3rem; font-size: 0.85rem; }
+
+    .events-table { }
+    .events-table td:first-child { font-family: var(--font-mono); font-size: 0.8rem; white-space: nowrap; }
+    .events-table td:nth-child(2) { font-size: 0.8rem; }
+
+    .note {
+      background: rgba(243, 156, 18, 0.1);
+      border-left: 3px solid var(--warning-amber);
+      padding: 0.75rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 768px) {
+      .doc-container { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; max-height: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="doc-container">
+    <nav class="sidebar" aria-label="Component navigation">
+      <h1>Planetwood<br/>Components</h1>
+      <ul>
+        <li><a href="#loading-screen">Loading Screen</a></li>
+        <li><a href="#hud">HUD</a></li>
+        <li><a href="#chat-input">Chat Input</a></li>
+        <li><a href="#chat-bubbles">Chat Bubbles</a></li>
+        <li><a href="#chat-log">Chat Log</a></li>
+        <li><a href="#notifications">Notifications</a></li>
+        <li><a href="#emote-picker">Emote Picker</a></li>
+        <li><a href="#player-list">Player List</a></li>
+        <li><a href="#settings-panel">Settings Panel</a></li>
+        <li><a href="#error-screen">Error Screen</a></li>
+        <li><a href="#nameplate">Nameplate</a></li>
+      </ul>
+    </nav>
+
+    <main class="content">
+
+      <!-- ================================================================ -->
+      <!-- LOADING SCREEN -->
+      <!-- ================================================================ -->
+      <section class="component" id="loading-screen">
+        <h2>Loading Screen</h2>
+        <p>Full-screen overlay shown during game asset loading. Displays logo, progress bar, status text, and tip cycling. Covers all loading states including error recovery.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Initial (0%)</div>
+          <div class="state-box">Mid-Progress (47%)</div>
+          <div class="state-box">Near Complete (92%)</div>
+          <div class="state-box">Complete (100%)</div>
+          <div class="state-box">Error (corrupt)</div>
+          <div class="state-box">Error (network)</div>
+          <div class="state-box">Error (reconnecting)</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>show()</code></td><td><code>() =&gt; void</code></td><td>Shows the loading screen with fade-in</td></tr>
+            <tr><td><code>hide()</code></td><td><code>() =&gt; void</code></td><td>Hides the loading screen with fade-out</td></tr>
+            <tr><td><code>setProgress(n)</code></td><td><code>(n: number) =&gt; void</code></td><td>Sets progress 0–100, updates bar and aria-valuenow</td></tr>
+            <tr><td><code>setSubProgress(n)</code></td><td><code>(n: number) =&gt; void</code></td><td>Sets sub-file progress 0–1 within the current step</td></tr>
+            <tr><td><code>setStatus(text)</code></td><td><code>(text: string) =&gt; void</code></td><td>Sets the status text shown below the progress bar</td></tr>
+            <tr><td><code>setError(err)</code></td><td><code>(err: object) =&gt; void</code></td><td>Shows error state with message and retry button</td></tr>
+            <tr><td><code>setTip(index)</code></td><td><code>(index: number) =&gt; void</code></td><td>Cycles to a specific tip by index</td></tr>
+            <tr><td><code>cycleTip()</code></td><td><code>() =&gt; void</code></td><td>Advances to the next tip (called on interval)</td></tr>
+            <tr><td><code>isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Returns whether the screen is currently visible</td></tr>
+          </table>
+        </div>
+
+        <h3>Error Config</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            <tr><td><code>type</code></td><td><code>'corrupt' | 'network' | 'timeout'</code></td><td>Determines icon and default message</td></tr>
+            <tr><td><code>message</code></td><td><code>string</code></td><td>Custom message (overrides default)</td></tr>
+            <tr><td><code>retryable</code></td><td><code>boolean</code></td><td>Whether to show the retry button</td></tr>
+            <tr><td><code>onRetry</code></td><td><code>() =&gt; void</code></td><td>Callback for retry button click</td></tr>
+          </table>
+        </div>
+
+        <h3>Tips Array</h3>
+        <p>Cycles every 8 seconds during loading:</p>
+        <div class="api-code"><code>[
+  "Explore a living world with unique NPCs",
+  "Chat with other players in real time",
+  "Use emotes to express yourself",
+  "Collect hidden treasures across the planet",
+  "Customize your avatar appearance"
+]</code></div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+            <tr><td><code>loading:retry</code></td><td><code>{}</code></td><td>User clicks retry button</td></tr>
+            <tr><td><code>loading:dismiss</code></td><td><code>{}</code></td><td>User clicks report / dismiss</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="progressbar"</code> with <code>aria-valuenow</code> for progress</li>
+            <li><code>aria-live="polite"</code> on status and tip text</li>
+            <li><code>aria-busy="true"</code> on container while loading</li>
+            <li>Focus trapping during loading (cannot tab out)</li>
+            <li><code>prefers-reduced-motion</code>: disables all transitions</li>
+            <li>Error state has <code>role="alertdialog"</code> with focus trap</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- HUD -->
+      <!-- ================================================================ -->
+      <section class="component" id="hud">
+        <h2>HUD (Heads-Up Display)</h2>
+        <p>Top-of-screen status bar showing player count, FPS counter, and connection quality indicator. Persistent throughout gameplay.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Default (connected)</div>
+          <div class="state-box">Low FPS (&lt;30)</div>
+          <div class="state-box">High Player Count (10+)</div>
+          <div class="state-box">Poor Connection (latency)</div>
+          <div class="state-box">Disconnected</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>setFPS(n)</code></td><td><code>(n: number) =&gt; void</code></td><td>Sets current FPS value; styles warning below 30</td></tr>
+            <tr><td><code>setPlayerCount(n)</code></td><td><code>(n: number) =&gt; void</code></td><td>Sets connected player count</td></tr>
+            <tr><td><code>setConnectionQuality(q)</code></td><td><code>(q: string) =&gt; void</code></td><td>Sets quality: <code>'good'|'fair'|'poor'|'disconnected'</code></td></tr>
+            <tr><td><code>setLatency(ms)</code></td><td><code>(ms: number) =&gt; void</code></td><td>Sets ping in milliseconds</td></tr>
+          </table>
+        </div>
+
+        <h3>Connection Quality Mapping</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Quality</th><th>Color</th><th>Indicator</th></tr>
+            <tr><td><code>good</code></td><td>Green</td><td>Solid dot</td></tr>
+            <tr><td><code>fair</code></td><td>Amber</td><td>Pulsing dot</td></tr>
+            <tr><td><code>poor</code></td><td>Red</td><td>Flashing dot</td></tr>
+            <tr><td><code>disconnected</code></td><td>Gray</td><td>Dashed outline</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="status"</code> on container</li>
+            <li><code>aria-live="polite"</code> for dynamic updates</li>
+            <li><code>aria-label</code> on each stat item with current value</li>
+            <li>Connection quality has additional screen-reader announcement on change</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- CHAT INPUT -->
+      <!-- ================================================================ -->
+      <section class="component" id="chat-input">
+        <h2>Chat Input Panel</h2>
+        <p>Fixed-position dialog at bottom-center for composing and sending chat messages. Opens on Enter, closes on Escape or Send. Rate-limited to 1 message per 2 seconds.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Closed (default)</div>
+          <div class="state-box">Open — empty</div>
+          <div class="state-box">Open — typing</div>
+          <div class="state-box">Open — rate limited</div>
+          <div class="state-box">Open — at max (280)</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.ChatPanel.open()</code></td><td><code>() =&gt; void</code></td><td>Opens the dialog, focuses input</td></tr>
+            <tr><td><code>window.ChatPanel.close()</code></td><td><code>() =&gt; void</code></td><td>Closes the dialog, blurs input</td></tr>
+            <tr><td><code>window.ChatPanel.isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Checks open state</td></tr>
+          </table>
+        </div>
+
+        <h3>Config</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+            <tr><td><code>RATE_LIMIT_MS</code></td><td>2000</td><td>Minimum ms between sends</td></tr>
+            <tr><td><code>MAX_LENGTH</code></td><td>280</td><td>Max message characters</td></tr>
+          </table>
+        </div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+            <tr><td><code>chat:send</code></td><td><code>{ message: string }</code></td><td>Message sent (Enter or Send button)</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="dialog"</code> with <code>aria-modal="true"</code></li>
+            <li><code>aria-label="Chat"</code> on dialog, <code>aria-label="Chat message"</code> on input</li>
+            <li>Inline <code>aria-live="polite"</code> announcer for state changes</li>
+            <li>Send button disabled state conveyed visually and via <code>aria-disabled</code></li>
+            <li>Escape to close, Enter to send (when input focused)</li>
+            <li><code>maxlength="280"</code> prevents overflow</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- CHAT BUBBLES -->
+      <!-- ================================================================ -->
+      <section class="component" id="chat-bubbles">
+        <h2>Chat Bubbles (3D Overlay)</h2>
+        <p>Floating chat bubbles that appear above player heads in the 3D scene. Each bubble auto-fades after 5 seconds. Keyed by player name (one bubble per player at a time).</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Hidden (default)</div>
+          <div class="state-box">Fading In</div>
+          <div class="state-box">Visible</div>
+          <div class="state-box">Fading Out</div>
+          <div class="state-box">Replaced (new msg)</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.ChatBubbles.showMessage({name, text})</code></td><td><code>({name: string, text: string}) =&gt; void</code></td><td>Shows or replaces a bubble for a player</td></tr>
+            <tr><td><code>window.ChatBubbles.updatePositions(updates)</code></td><td><code>({name, x, y}[]) =&gt; void</code></td><td>Updates bubble pixel positions (from 3D projection)</td></tr>
+            <tr><td><code>window.ChatBubbles.clearAll()</code></td><td><code>() =&gt; void</code></td><td>Removes all bubbles immediately</td></tr>
+            <tr><td><code>window.ChatBubbles.isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Returns whether any bubbles exist</td></tr>
+          </table>
+        </div>
+
+        <h3>Config</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+            <tr><td><code>SHOW_DURATION</code></td><td>5000 ms</td><td>Visible time before fade starts</td></tr>
+            <tr><td><code>FADE_IN</code></td><td>300 ms</td><td>Fade-in transition duration</td></tr>
+            <tr><td><code>FADE_OUT</code></td><td>1000 ms</td><td>Fade-out transition duration</td></tr>
+            <tr><td><code>MAX_ANNOUNCE_LEN</code></td><td>120</td><td>Max chars for screen reader announcement</td></tr>
+          </table>
+        </div>
+
+        <h3>Internal State</h3>
+        <div class="api-code"><code>Map&lt;playerName, {
+  id: string,
+  name: string,
+  el: HTMLElement,
+  showTime: number,
+  hideTimer?: number,
+  fadeTimer?: number
+}&gt;</code></div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="region"</code> with <code>aria-label="Chat messages"</code></li>
+            <li><code>aria-live="polite"</code> announcer for new messages</li>
+            <li>Truncated announcement to 120 chars to prevent verbosity</li>
+            <li><code>prefers-reduced-motion</code>: disables fade transitions</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- CHAT LOG -->
+      <!-- ================================================================ -->
+      <section class="component" id="chat-log">
+        <h2>Chat Log</h2>
+        <p>Toggleable chat history panel anchored to the bottom-left. Displays recent messages with timestamps. Max 50 entries with auto-truncation. Focus trapping, click-outside-to-close, Escape-to-close.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Closed (default)</div>
+          <div class="state-box">Open — empty</div>
+          <div class="state-box">Open — with messages</div>
+          <div class="state-box">Open — at capacity (50)</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.ChatLog.add({name, text, timestamp})</code></td><td><code>({name: string, text: string, timestamp?: string}) =&gt; void</code></td><td>Appends a chat entry; auto-truncates at 50</td></tr>
+            <tr><td><code>window.ChatLog.toggle()</code></td><td><code>() =&gt; void</code></td><td>Opens/closes panel with focus management</td></tr>
+            <tr><td><code>window.ChatLog.clear()</code></td><td><code>() =&gt; void</code></td><td>Clears all entries, restores empty state</td></tr>
+            <tr><td><code>window.ChatLog.isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Returns whether panel is open</td></tr>
+          </table>
+        </div>
+
+        <h3>Config</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Constant</th><th>Value</th><th>Purpose</th></tr>
+            <tr><td><code>MAX_MESSAGES</code></td><td>50</td><td>Max entries before oldest is removed</td></tr>
+            <tr><td>Timestamp default</td><td><code>toLocaleTimeString()</code></td><td>Fallback when timestamp omitted</td></tr>
+          </table>
+        </div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+            <tr><td>(none dispatched)</td><td>—</td><td>Chat log is read-only UI</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li>Toggle button: <code>aria-expanded</code>, <code>aria-controls</code></li>
+            <li>Panel: <code>role="dialog"</code>, <code>aria-label="Chat history"</code></li>
+            <li>Entries container: <code>role="log"</code>, <code>aria-label="Chat messages history"</code></li>
+            <li><code>tabindex="-1"</code> on entries (becomes 0 when open)</li>
+            <li>Focus trap within panel via Tab cycling</li>
+            <li>Focus restored to toggle on close</li>
+            <li><code>aria-live="polite"</code> for entry announcements</li>
+            <li><code>prefers-reduced-motion</code>: disables slide transitions</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- NOTIFICATIONS -->
+      <!-- ================================================================ -->
+      <section class="component" id="notifications">
+        <h2>Notifications (Toast System)</h2>
+        <p>Toast notification system for join/leave events, system messages, and errors. Stacks in top-right corner. Auto-dismiss after 4 seconds, click to dismiss.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Join (green)</div>
+          <div class="state-box">Leave (amber)</div>
+          <div class="state-box">System (blue)</div>
+          <div class="state-box">Error (red)</div>
+          <div class="state-box">Stacked (3+)</div>
+        </div>
+
+        <h3>Type Configuration</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Type</th><th>Color</th><th>Border</th><th>Icon</th></tr>
+            <tr><td><code>join</code></td><td>Green bg</td><td>Green left border</td><td><code>●</code></td></tr>
+            <tr><td><code>leave</code></td><td>Amber bg</td><td>Amber left border</td><td><code>●</code></td></tr>
+            <tr><td><code>system</code></td><td>Blue bg</td><td>Blue left border</td><td><code>●</code></td></tr>
+            <tr><td><code>error</code></td><td>Red bg</td><td>Red left border</td><td><code>●</code></td></tr>
+          </table>
+        </div>
+
+        <h3>API</h3>
+        <div class="api-code"><code>window.Notifications.notify({
+  type: 'join' | 'leave' | 'system' | 'error',
+  title: string,
+  message: string,
+  duration: 4000  // ms, optional
+});</code></div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="alert"</code> on each toast</li>
+            <li><code>aria-live="assertive"</code> on container</li>
+            <li>Colored left border + text prefix for type differentiation</li>
+            <li>Dismissible by click or keyboard</li>
+            <li>Auto-dismiss duration reset on interaction</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- EMOTE PICKER -->
+      <!-- ================================================================ -->
+      <section class="component" id="emote-picker">
+        <h2>Emote Picker</h2>
+        <p>Modal dialog with 9 emotes in a 3-column grid. Opens via custom event <code>emote:open</code> or programmatic <code>EmotePicker.open()</code>. Closes on Escape or backdrop click. Focus trapped within.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Closed (default)</div>
+          <div class="state-box">Open</div>
+          <div class="state-box">Hovered</div>
+          <div class="state-box">Selected</div>
+        </div>
+
+        <h3>Emote Data</h3>
+        <div class="api-code"><code>[
+  { emoji: '👋', name: 'Wave' },
+  { emoji: '💃', name: 'Dance' },
+  { emoji: '👆', name: 'Point' },
+  { emoji: '👏', name: 'Clap' },
+  { emoji: '😂', name: 'Laugh' },
+  { emoji: '🪑', name: 'Sit' },
+  { emoji: '😴', name: 'Sleep' },
+  { emoji: '❤️', name: 'Heart' },
+  { emoji: '🙋', name: 'Bye' }
+]</code></div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>EmotePicker.open()</code></td><td><code>() =&gt; void</code></td><td>Static — creates instance if needed, opens</td></tr>
+            <tr><td><code>EmotePicker.close()</code></td><td><code>() =&gt; void</code></td><td>Static — closes instance</td></tr>
+            <tr><td><code>EmotePicker.isOpen</code></td><td><code>static getter =&gt; boolean</code></td><td>Static — checks open state</td></tr>
+            <tr><td><code>instance.open()</code></td><td><code>() =&gt; void</code></td><td>Opens with focus trap</td></tr>
+            <tr><td><code>instance.close()</code></td><td><code>() =&gt; void</code></td><td>Closes, restores focus</td></tr>
+            <tr><td><code>instance.selectEmote(emote)</code></td><td><code>({emoji, name}) =&gt; void</code></td><td>Dispatches <code>emote:select</code>, then closes</td></tr>
+          </table>
+        </div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+            <tr><td><code>emote:open</code></td><td>(none)</td><td>Listened on document to open picker</td></tr>
+            <tr><td><code>emote:select</code></td><td><code>{ emoji: string, name: string }</code></td><td>Dispatched on document when emote chosen</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="dialog"</code> with <code>aria-modal="true"</code> and <code>aria-label="Emote picker"</code></li>
+            <li><code>role="grid"</code> for emote layout</li>
+            <li>Each emote button: <code>role="gridcell"</code> and <code>aria-label="{name}"</code></li>
+            <li>Focus trap within buttons on Tab</li>
+            <li>Focus restored to triggering element on close</li>
+            <li><code>prefers-reduced-motion</code>: disables transitions</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- PLAYER LIST -->
+      <!-- ================================================================ -->
+      <section class="component" id="player-list">
+        <h2>Player List</h2>
+        <p>Top-right panel showing connected players with status dots (online/away/disconnected). Collapsible list with "You" badge for local player. Opens/closes via toggle button, click-outside, or Escape.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Closed — 0 players</div>
+          <div class="state-box">Closed — 3 players</div>
+          <div class="state-box">Open — collapsed list</div>
+          <div class="state-box">Open — expanded list</div>
+          <div class="state-box">Open — many players (8+)</div>
+        </div>
+
+        <h3>Status Indicators</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Status</th><th>CSS Class</th><th>Color</th></tr>
+            <tr><td>Online</td><td><code>status-online</code></td><td>Green <code>#4e8c6d</code></td></tr>
+            <tr><td>Away</td><td><code>status-away</code></td><td>Amber <code>#f39c12</code></td></tr>
+            <tr><td>Disconnected</td><td><code>status-disconnected</code></td><td>Red <code>#c0392b</code></td></tr>
+          </table>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.PlayerList.setPlayers(players)</code></td><td><code>([{name, status, isLocal?}]) =&gt; void</code></td><td>Replaces player list, updates UI</td></tr>
+            <tr><td><code>window.PlayerList.openPanel()</code></td><td><code>() =&gt; void</code></td><td>Opens the player list panel</td></tr>
+            <tr><td><code>window.PlayerList.closePanel()</code></td><td><code>() =&gt; void</code></td><td>Closes the panel</td></tr>
+            <tr><td><code>window.PlayerList.togglePanel()</code></td><td><code>() =&gt; void</code></td><td>Toggles panel visibility</td></tr>
+            <tr><td><code>window.PlayerList.toggleList()</code></td><td><code>() =&gt; void</code></td><td>Toggles list collapse/expand</td></tr>
+            <tr><td><code>window.PlayerList.isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Panel open + list expanded + has players</td></tr>
+            <tr><td><code>window.PlayerList.isVisible</code></td><td><code>getter =&gt; boolean</code></td><td>Panel open + has players</td></tr>
+          </table>
+        </div>
+
+        <h3>Player Data</h3>
+        <div class="api-code"><code>{
+  name: string,
+  status: 'online' | 'away' | 'disconnected',
+  isLocal?: boolean
+}</code></div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li>Toggle button: <code>aria-expanded</code> reflects panel state</li>
+            <li>Status conveyed via CSS class only — missing <code>aria-*</code> for status dots</li>
+            <li>"You" badge visually identifies local player</li>
+            <li>Escape to close, click-outside to close</li>
+            <li><code>prefers-reduced-motion</code>: disables expand/collapse animation</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- SETTINGS PANEL -->
+      <!-- ================================================================ -->
+      <section class="component" id="settings-panel">
+        <h2>Settings Panel</h2>
+        <p>Modal settings dialog with Audio (volume, mute), Graphics (quality, FPS toggle), Controls (key bindings display), and About sections. Focus trapped, closes on Escape or backdrop click.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Closed (default)</div>
+          <div class="state-box">Open — Audio tab</div>
+          <div class="state-box">Open — Graphics tab</div>
+          <div class="state-box">Open — Controls tab</div>
+          <div class="state-box">Open — About tab</div>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.SettingsPanel.open()</code></td><td><code>() =&gt; void</code></td><td>Opens modal with focus trap</td></tr>
+            <tr><td><code>window.SettingsPanel.close()</code></td><td><code>() =&gt; void</code></td><td>Closes modal, restores focus</td></tr>
+            <tr><td><code>window.SettingsPanel.toggle()</code></td><td><code>() =&gt; void</code></td><td>Toggles open/closed</td></tr>
+          </table>
+        </div>
+
+        <h3>Settings</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Section</th><th>Control</th><th>Options / Range</th><th>Default</th></tr>
+            <tr><td>Audio</td><td>Volume slider</td><td>0–100</td><td>80</td></tr>
+            <tr><td>Audio</td><td>Mute toggle</td><td>on/off</td><td>off</td></tr>
+            <tr><td>Graphics</td><td>Quality select</td><td>Low, Medium, High, Ultra</td><td>High</td></tr>
+            <tr><td>Graphics</td><td>FPS counter toggle</td><td>on/off</td><td>off</td></tr>
+            <tr><td>Controls</td><td>Key bindings</td><td>Read-only display</td><td>WASD, Enter, B, Tab, ESC</td></tr>
+            <tr><td>About</td><td>Version info</td><td>Read-only text</td><td>v0.1.0</td></tr>
+          </table>
+        </div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>Trigger</th></tr>
+            <tr><td><code>settings:volume</code></td><td><code>{ value: number }</code></td><td>Volume slider (input)</td></tr>
+            <tr><td><code>settings:mute</code></td><td><code>{ muted: boolean }</code></td><td>Mute toggle (change)</td></tr>
+            <tr><td><code>settings:quality</code></td><td><code>{ level: string }</code></td><td>Quality select (change)</td></tr>
+            <tr><td><code>settings:fps</code></td><td><code>{ show: boolean }</code></td><td>FPS toggle (change)</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="dialog"</code> with <code>aria-modal="true"</code> and <code>aria-label="Settings"</code></li>
+            <li>Volume slider: <code>role="slider"</code> with <code>aria-valuemin</code>, <code>aria-valuemax</code>, <code>aria-valuenow</code></li>
+            <li>Toggle switches: native checkbox with visible slider styling</li>
+            <li>Focus trap within modal via Tab cycling</li>
+            <li>Focus restored to triggering element on close</li>
+            <li>Backdrop <code>aria-hidden="true"</code></li>
+            <li><code>prefers-reduced-motion</code>: disables transitions</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- ERROR SCREEN -->
+      <!-- ================================================================ -->
+      <section class="component" id="error-screen">
+        <h2>Error Screen</h2>
+        <p>Full-screen error overlay with icon, title, message, optional auto-reconnect countdown, and reconnect button. Dispatches <code>error:reconnect</code> and <code>error:dismiss</code>. Focus trapped, Escape blocked.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Disconnected</div>
+          <div class="state-box">Timed Out</div>
+          <div class="state-box">Error (generic)</div>
+          <div class="state-box">Kicked</div>
+          <div class="state-box">Reconnecting...</div>
+        </div>
+
+        <h3>Type Configuration</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Type</th><th>Title</th><th>Icon</th><th>Default Countdown</th></tr>
+            <tr><td><code>disconnect</code></td><td>Connection Lost</td><td>⚠️</td><td>10s</td></tr>
+            <tr><td><code>timeout</code></td><td>Connection Timed Out</td><td>⏰</td><td>10s</td></tr>
+            <tr><td><code>error</code></td><td>Something Went Wrong</td><td>❌</td><td>0 (manual only)</td></tr>
+            <tr><td><code>kicked</code></td><td>Kicked</td><td>🚫</td><td>0 (manual only)</td></tr>
+          </table>
+        </div>
+
+        <h3>API</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+            <tr><td><code>window.ErrorScreen.show(options)</code></td><td><code>({type?, message?, countdown?}) =&gt; void</code></td><td>Shows error overlay</td></tr>
+            <tr><td><code>window.ErrorScreen.hide()</code></td><td><code>() =&gt; void</code></td><td>Hides, dispatches <code>error:dismiss</code></td></tr>
+            <tr><td><code>window.ErrorScreen.updateCountdown(n)</code></td><td><code>(n: number) =&gt; void</code></td><td>Updates/resets countdown value</td></tr>
+            <tr><td><code>window.ErrorScreen.isOpen</code></td><td><code>getter =&gt; boolean</code></td><td>Checks visibility</td></tr>
+          </table>
+        </div>
+
+        <h3>Events</h3>
+        <div class="table-wrap">
+          <table class="events-table">
+            <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+            <tr><td><code>error:reconnect</code></td><td><code>{}</code></td><td>Countdown expires or button clicked</td></tr>
+            <tr><td><code>error:dismiss</code></td><td><code>{}</code></td><td><code>hide()</code> called</td></tr>
+          </table>
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="alertdialog"</code> with <code>aria-modal="true"</code></li>
+            <li>Backdrop: <code>role="presentation"</code> <code>aria-hidden="true"</code></li>
+            <li>Focus forced to Reconnect button on open</li>
+            <li>Focus restored to previous element on close</li>
+            <li>Focus trap within dialog</li>
+            <li>Escape key explicitly blocked (user must reconnect or wait)</li>
+            <li><code>prefers-reduced-motion</code>: disables transitions</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ================================================================ -->
+      <!-- NAMEPLATE -->
+      <!-- ================================================================ -->
+      <section class="component" id="nameplate">
+        <h2>Nameplate (CSS2DRenderer)</h2>
+        <p>3D nameplates rendered with Three.js CSS2DRenderer for avatar identification. Shows player name with status dot and optional "You" badge. Implemented per T020 as a CSS2DRenderer overlay.</p>
+
+        <h3>States</h3>
+        <div class="state-example">
+          <div class="state-box">Default (online)</div>
+          <div class="state-box">Away</div>
+          <div class="state-box">Local player ("You")</div>
+          <div class="state-box">Speaking (active)</div>
+          <div class="state-box">Chat bubble visible</div>
+        </div>
+
+        <h3>CSS Classes</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Class</th><th>Element</th><th>Effect</th></tr>
+            <tr><td><code>.pw-nameplate</code></td><td>Container div</td><td>Base nameplate with backdrop blur, flex layout</td></tr>
+            <tr><td><code>.status-dot</code></td><td>Inner span</td><td>8px circle, <code>border-radius: 50%</code></td></tr>
+            <tr><td><code>.status-dot.online</code></td><td>Status dot</td><td>Green <code>#4e8c6d</code> with glow</td></tr>
+            <tr><td><code>.status-dot.away</code></td><td>Status dot</td><td>Amber <code>#f39c12</code></td></tr>
+            <tr><td><code>.status-dot.disconnected</code></td><td>Status dot</td><td>Red <code>#c0392b</code></td></tr>
+            <tr><td><code>.player-name</code></td><td>Name span</td><td>White text, 14px, <code>font-weight: 600</code></td></tr>
+            <tr><td><code>.you-badge</code></td><td>Badge span</td><td>Green pill badge "You", 11px</td></tr>
+          </table>
+        </div>
+
+        <h3>Integration</h3>
+        <div class="api-code"><code>// Create CSS2DRenderer nameplate for a player
+const div = document.createElement('div');
+div.className = 'pw-nameplate';
+div.innerHTML = '&lt;span class="status-dot online"&gt;&lt;/span&gt;'
+  + '&lt;span class="player-name"&gt;' + name + '&lt;/span&gt;'
+  + (isLocal ? '&lt;span class="you-badge"&gt;You&lt;/span&gt;' : '');
+
+const label = new CSS2DObject(div);
+label.position.set(x, y + 2.5, z); // offset above avatar head
+nameplateGroup.add(label);
+
+// On each frame: project 3D position to screen via CSS2DRenderer
+// CSS2DRenderer automatically handles screen-space rendering</code></div>
+
+        <div class="note">
+          <strong>Note:</strong> Nameplates use <code>CSS2DRenderer</code> (not sprite-based) so text is always crisp regardless of camera distance. The renderer is separate from the WebGL renderer and renders on top.
+        </div>
+
+        <div class="accessibility">
+          <strong>Accessibility</strong>
+          <ul>
+            <li><code>role="status"</code> on each nameplate</li>
+            <li><code>aria-label</code> combining name and status: <code>"BraveFox - online"</code></li>
+            <li>Interactive (clickable for chat context)</li>
+            <li><code>pointer-events: auto</code> enables clicking through CSS2DRenderer layer</li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Active nav highlighting based on scroll position
+      const sections = document.querySelectorAll('.component');
+      const links = document.querySelectorAll('.sidebar a');
+
+      function updateActiveNav() {
+        let current = '';
+        sections.forEach(section => {
+          const rect = section.getBoundingClientRect();
+          if (rect.top <= 150) {
+            current = '#' + section.id;
+          }
+        });
+
+        links.forEach(link => {
+          link.classList.toggle('active', link.getAttribute('href') === current);
+        });
+
+        // Fallback to hash-based if scroll-based fails
+        if (!current && window.location.hash) {
+          const link = document.querySelector(`a[href="${window.location.hash}"]`);
+          if (link) link.classList.add('active');
+        }
+      }
+
+      window.addEventListener('scroll', updateActiveNav);
+      updateActiveNav();
+
+      // Smooth scroll for nav links
+      links.forEach(link => {
+        link.addEventListener('click', function(e) {
+          e.preventDefault();
+          const target = document.querySelector(this.getAttribute('href'));
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', this.getAttribute('href'));
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

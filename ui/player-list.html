@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Player List - Planetwood</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: rgba(40, 52, 54, 0.95);
+      --lighter-surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border: rgba(255, 255, 255, 0.1);
+      --red: #c0392b;
+      --amber: #f39c12;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: transparent;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .player-list-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 220px;
+      max-height: 400px;
+      overflow: hidden;
+      background: var(--dark-bg);
+      backdrop-filter: blur(8px);
+      border-radius: var(--radius);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      font-size: 13px;
+      color: var(--white-text);
+      user-select: none;
+    }
+
+    .toggle-button {
+      position: relative;
+      align-self: flex-end;
+      margin: 8px;
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 50%;
+      color: var(--white-text);
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .toggle-button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .toggle-button .count {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: var(--primary-green);
+      color: var(--white-text);
+      border-radius: 50%;
+      padding: 2px 6px;
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header .title {
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--primary-green);
+    }
+
+    .header .toggle-cheveron {
+      background: none;
+      border: none;
+      color: var(--white-text);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px;
+      transition: transform 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .header .toggle-cheveron.collapsed {
+      transform: rotate(-90deg);
+    }
+
+    .list {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: none;
+    }
+
+    .panel-open.has-players .header,
+    .panel-open.has-players .list {
+      display: block;
+    }
+
+    .no-players .header,
+    .no-players .list {
+      display: none;
+    }
+
+    .player-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+    }
+
+    .player-item:not(:last-child) {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status-online { background-color: var(--primary-green); }
+    .status-away { background-color: var(--amber); }
+    .status-disconnected { background-color: var(--red); }
+
+    .player-name {
+      flex-grow: 1;
+    }
+
+    .you-badge {
+      background-color: var(--primary-green);
+      color: var(--white-text);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+      white-space: nowrap;
+    }
+
+    .list {
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .list.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .list.hidden {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+
+    .panel-open.has-players .list.collapsed { display: none; }
+    .panel-open.has-players .list.expanded { display: block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .list,
+      .toggle-button,
+      .header .toggle-cheveron {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="player-list-container no-players">
+    <button class="toggle-button" aria-label="Toggle player list" aria-expanded="false">
+      👥
+      <span class="count">0</span>
+    </button>
+    <div class="header">
+      <span class="title">Players (<span class="count">0</span>)</span>
+      <button class="toggle-cheveron" aria-label="Collapse player list">▾</button>
+    </div>
+    <div class="list"></div>
+  </div>
+
+  <script>
+    class PlayerList {
+      constructor() {
+        this.panelOpen = false;
+        this.players = [];
+        this.listExpanded = false;
+        this.container = document.querySelector('.player-list-container');
+        this.toggleButton = this.container.querySelector('.toggle-button');
+        this.chevronButton = this.container.querySelector('.toggle-cheveron');
+        this.countInHeader = this.container.querySelector('.header .count');
+        this.countInToggle = this.container.querySelector('.toggle-button .count');
+        this.listElement = this.container.querySelector('.list');
+        this.init();
+      }
+
+      init() {
+        this.toggleButton.addEventListener('click', () => this.togglePanel());
+        this.chevronButton.addEventListener('click', () => this.toggleList());
+        document.addEventListener('click', (e) => {
+          if (!this.container.contains(e.target) && !this.toggleButton.contains(e.target)) {
+            this.closePanel();
+          }
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') this.closePanel();
+        });
+      }
+
+      togglePanel() {
+        this.panelOpen = !this.panelOpen;
+        this.toggleButton.setAttribute('aria-expanded', this.panelOpen);
+        this.updateUI();
+      }
+
+      closePanel() {
+        if (!this.panelOpen) return;
+        this.panelOpen = false;
+        this.updateUI();
+      }
+
+      openPanel() {
+        this.panelOpen = true;
+        this.toggleButton.setAttribute('aria-expanded', 'true');
+        this.updateUI();
+      }
+
+      toggleList() {
+        if (this.panelOpen && this.players.length > 0) {
+          this.listExpanded = !this.listExpanded;
+          this.updateUI();
+        }
+      }
+
+      setPlayers(players) {
+        this.players = players;
+        this.updateUI();
+      }
+
+      updateUI() {
+        const count = this.players.length;
+        this.countInHeader.textContent = count;
+        this.countInToggle.textContent = count;
+
+        this.container.classList.toggle('panel-open', this.panelOpen);
+        this.container.classList.toggle('has-players', this.players.length > 0);
+        this.container.classList.toggle('no-players', this.players.length === 0);
+
+        if (this.panelOpen && this.players.length > 0) {
+          this.listElement.classList.toggle('collapsed', !this.listExpanded);
+          this.listElement.classList.toggle('expanded', this.listExpanded);
+          if (this.listExpanded) {
+            this.listElement.classList.remove('hidden');
+            this.listElement.classList.add('visible');
+          } else {
+            this.listElement.classList.remove('visible');
+            this.listElement.classList.add('hidden');
+          }
+        } else {
+          this.listElement.classList.remove('visible', 'hidden');
+        }
+
+        this.chevronButton.classList.toggle('collapsed', !this.listExpanded);
+        this.renderList();
+      }
+
+      renderList() {
+        if (!this.container.classList.contains('has-players') || !this.panelOpen) {
+          this.listElement.innerHTML = '';
+          return;
+        }
+
+        this.listElement.innerHTML = this.players.map(p => {
+          const escapedName = this.escapeHtml(p.name);
+          const statusClass = {
+            online: 'status-online',
+            away: 'status-away',
+            disconnected: 'status-disconnected'
+          }[p.status] || 'status-offline';
+          const isLocal = p.isLocal ? '<span class="you-badge">You</span>' : '';
+          return `
+            <div class="player-item">
+              <span class="status-dot ${statusClass}"></span>
+              <span class="player-name">${escapedName}</span>
+              ${isLocal}
+            </div>
+          `;
+        }).join('');
+      }
+
+      escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+      }
+
+      get isOpen() {
+        return this.panelOpen && this.players.length > 0 && this.listExpanded;
+      }
+
+      get isVisible() {
+        return this.panelOpen && this.players.length > 0;
+      }
+    }
+
+    window.PlayerList = new PlayerList();
+  </script>
+</body>
+</html>
