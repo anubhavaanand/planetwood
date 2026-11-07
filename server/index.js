@@ -338,7 +338,7 @@ setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
     for (const [id, client] of room.clients) {
-      if (now - client.lastSeen > 10000) {
+      if (now - client.lastSeen > 3000) {
         client.ws.close();
       }
     }
