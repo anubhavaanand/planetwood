@@ -12,6 +12,7 @@ import { QuestSystem } from './systems/QuestSystem.js';
 import { QuestUI } from './systems/QuestUI.js';
 import { DialogueSystem } from './systems/DialogueSystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
+import { ProgressionSystem } from './systems/ProgressionSystem.js';
 import { QUESTS } from './data/quests.js';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3005';
@@ -45,22 +46,26 @@ let gameState = 'loading';
 const INTRO_LINES = [
   "LOOKS LIKE I SLEPT IN... I BETTER START TODAY'S DELIVERIES.",
   "I'VE GOT FIVE ON THE LIST. HOPEFULLY THEY'RE EASY TO FIND.",
+  "First stop: the office worker near the fountain. She's waiting for a letter.",
+  "Press E to talk. The checklist in the corner tracks every delivery.",
+  "Five deliveries... and one of them isn't even mine.",
 ];
 let introLineIndex = 0;
 
 // Quest NPC positions along the street (x = lane side, z = distance down road).
+// All z values must be within road bounds (-130 to +130).
 const NPC_STREET_POS = {
   'office-worker': { x: -10, z: -70 },
   'boss': { x: -10, z: -30 },
   'caveman': { x: 10, z: 10 },
   'young-lady': { x: 10, z: 50 },
   'factory-worker-a': { x: -10, z: 110 },
-  'male-scientist': { x: 10, z: 150 },
-  'female-scientist': { x: 10, z: 190 },
-  'oldwoman': { x: -10, z: 220 },
-  'mountainman': { x: 10, z: 240 },
+  'male-scientist': { x: 10, z: 130 },
+  'female-scientist': { x: -10, z: 120 },
+  'oldwoman': { x: 10, z: 100 },
+  'mountainman': { x: -10, z: 80 },
   'diver': { x: -10, z: -120 },
-  'musician': { x: 10, z: -160 },
+  'musician': { x: 10, z: -100 },
 };
 
 async function init() {
@@ -134,10 +139,38 @@ async function initCore() {
   ui = new UISystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
   questUI = new QuestUI(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
   dialogueSys = new DialogueSystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
-  questSys = new QuestSystem(questUI);
+  progressionSys = new ProgressionSystem();
+  questSys = new QuestSystem(questUI, progressionSys);
 
   dialogueSys.onStepComplete = (questId, stepId) => {
     if (questSys) questSys.completeStep(questId, stepId);
+  };
+
+  progressionSys.onLevelUp = (oldLevel, newLevel) => {
+    ui.addNotification(`Level Up! You are now level ${newLevel}`);
+  };
+
+  progressionSys.onCoinsChange = (coins) => {
+    // Could update a coin counter UI here
+    console.log(`Coins: ${coins}`);
+  };
+
+  progressionSys.onReputationChange = (npcType, rep, tier) => {
+    ui.addNotification(`${npcType} reputation: ${tier.name} (${rep})`);
+  };
+
+  // Handle player choice branches in dialogue
+  dialogueSys.onStepChoice = (questId, nextStepId) => {
+    if (questSys) {
+      const stepData = questSys.selectNextStep(questId, nextStepId);
+      if (stepData) {
+        // Re-open dialogue with the chosen step
+        const npc = npcSys?.npcs.find(n => n.id === dialogueSys.currentNpc?.id);
+        if (npc) {
+          dialogueSys.open(npc);
+        }
+      }
+    }
   };
 
   questUI.onItemReceived = (extraData) => {
@@ -320,7 +353,7 @@ function _tryInteract() {
   if (!playerAvatar || !npcSys || dialogueSys.active) return;
   const playerPos = playerAvatar.group.position;
   let nearest = null;
-  let nearestDist = 40;
+  let nearestDist = 7; // Must walk up to NPC to interact
   for (const npc of npcSys.npcs) {
     const d = npc.group.position.distanceTo(playerPos);
     if (d < nearestDist) {
