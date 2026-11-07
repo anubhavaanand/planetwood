@@ -24,7 +24,7 @@ export class SceneSystem {
       frameTimeIdx: 0,
     };
 
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
     this.camera.position.set(60, 45, 70);
 
     // Performance tier detection for integrated GPUs (e.g., Intel Iris Plus)

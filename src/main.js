@@ -4,6 +4,7 @@ import { AnimationSystem } from './systems/AnimationSystem.js';
 import { MeshLoader } from './systems/MeshLoader.js';
 import { PlayerInput } from './systems/PlayerInput.js';
 import { StreetSystem } from './systems/StreetSystem.js';
+import { PlanetSystem } from './systems/PlanetSystem.js';
 import { NPCSystem } from './systems/NPCSystem.js';
 import { MultiplayerSystem } from './systems/MultiplayerSystem.js';
 import { ChatSystem } from './systems/ChatSystem.js';
@@ -27,6 +28,7 @@ const sceneSys = new SceneSystem(document.body);
 const animSys = new AnimationSystem();
 const meshLoader = new MeshLoader();
 const streetSys = new StreetSystem(sceneSys.scene);
+const planetSys = new PlanetSystem(sceneSys.scene);
 
 let playerAvatar = null;
 let npcSys = null;
@@ -38,9 +40,13 @@ let questUI = null;
 let dialogueSys = null;
 let questSys = null;
 let fallbackTimer = null;
+let progressionSys = null;
 
 // Game flow state: 'loading' | 'title' | 'intro' | 'playing'
 let gameState = 'loading';
+
+// Whether the player is currently on the planet scene (z > 160) vs the street.
+let inPlanetScene = false;
 
 // Intro dialogue lines (matching the official game's opening).
 const INTRO_LINES = [
@@ -141,6 +147,45 @@ async function initCore() {
   dialogueSys = new DialogueSystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
   progressionSys = new ProgressionSystem();
   questSys = new QuestSystem(questUI, progressionSys);
+
+  // Multiplayer system — connects to the WebSocket relay for cross-player presence.
+  multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
+  multiplayer.connect();
+
+  multiplayer.onPlayerJoined = (data) => {
+    const avatar = multiplayer.players.get(data.id);
+    if (avatar) {
+      ui.addNameplate(avatar, data.displayName);
+    }
+  };
+
+  multiplayer.onPlayerLeft = (id) => {
+    const avatar = multiplayer.players.get(id);
+    if (avatar) {
+      ui.removeNameplate(avatar);
+    }
+  };
+
+  multiplayer.onChatMessage = (data) => {
+    if (data.senderId === multiplayer.localID) return;
+    ui.addChatMessage(data.senderName || 'Player', data.text, data.senderId);
+  };
+
+  multiplayer.onEmote = (id, type) => {
+    const avatar = multiplayer.players.get(id);
+    if (avatar) {
+      avatar.playAnimation(type === 'wave' ? 'wave' : type === 'stretch' ? 'stretch' : 'look');
+      setTimeout(() => {
+        if (avatar.animationState === type) {
+          avatar.playAnimation('idle');
+        }
+      }, 4000);
+    }
+  };
+
+  multiplayer.onNotification = (text) => {
+    ui.addNotification(text);
+  };
 
   dialogueSys.onStepComplete = (questId, stepId) => {
     if (questSys) questSys.completeStep(questId, stepId);
@@ -244,6 +289,12 @@ async function initCore() {
 
   updateLoading('Ready!', 100);
   setTimeout(() => { loadingEl.style.display = 'none'; showTitle(); }, 400);
+
+  // Start with the street visible and the planet hidden; the transition
+  // activates when the player crosses z > 160.
+  streetSys.show();
+  planetSys.hide();
+
   animate();
 }
 
@@ -409,9 +460,36 @@ function animate() {
     }
   }
 
-  // Fixed 2.5D follow camera behind the messenger.
+  // Camera mode: 2.5D follow on the street, orbit controls on the planet.
   if (playing && playerAvatar) {
-    streetSys.updateCamera(sceneSys.camera, playerAvatar.group.position);
+    const playerZ = playerAvatar.group.position.z;
+
+    // Transition to planet scene when crossing z > 160.
+    if (!inPlanetScene && playerZ > 160) {
+      inPlanetScene = true;
+      streetSys.hide();
+      planetSys.show();
+      // Switch to orbit controls for the planet view.
+      sceneSys.controls.enabled = true;
+      sceneSys.controls.target.set(playerAvatar.group.position.x, playerAvatar.group.position.y, playerZ);
+      sceneSys.controls.minDistance = 3;
+      sceneSys.controls.maxDistance = 40;
+      sceneSys.controls.maxPolarAngle = Math.PI / 2;
+    } else if (inPlanetScene && playerZ <= 160) {
+      inPlanetScene = false;
+      planetSys.hide();
+      streetSys.show();
+      // Switch back to fixed 2.5D follow camera.
+      sceneSys.controls.enabled = false;
+    }
+
+    if (inPlanetScene) {
+      // Orbit camera around the player on the planet surface.
+      sceneSys.controls.target.set(playerAvatar.group.position.x, playerAvatar.group.position.y, playerZ);
+      sceneSys.controls.update();
+    } else {
+      streetSys.updateCamera(sceneSys.camera, playerAvatar.group.position);
+    }
   }
 
   if (multiplayer && playerAvatar && playing) {

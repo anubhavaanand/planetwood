@@ -8,6 +8,8 @@ export class StreetSystem {
     this.scene = scene;
     this.roadWidth = 16;
     this.roadLength = 260;
+    this.group = new THREE.Group();
+    this.scene.add(this.group);
     this._buildStreet();
   }
 
@@ -23,7 +25,7 @@ export class StreetSystem {
     this.road.rotation.x = -Math.PI / 2;
     this.road.position.set(0, 0.02, -this.roadLength / 2);
     this.road.receiveShadow = true;
-    this.scene.add(this.road);
+    this.group.add(this.road);
 
     // ---- Center dashed line (InstancedMesh) ----
     const dashGeo = new THREE.PlaneGeometry(0.5, 3);
@@ -39,7 +41,7 @@ export class StreetSystem {
     }
     this.dashInstanced.instanceMatrix.needsUpdate = true;
     this.dashInstanced.frustumCulled = true;
-    this.scene.add(this.dashInstanced);
+    this.group.add(this.dashInstanced);
 
     // ---- Sidewalks ----
     const sidewalkWidth = 6;
@@ -53,13 +55,13 @@ export class StreetSystem {
     leftWalk.rotation.x = -Math.PI / 2;
     leftWalk.position.set(-(this.roadWidth / 2 + sidewalkWidth / 2), 0.03, -this.roadLength / 2);
     leftWalk.receiveShadow = true;
-    this.scene.add(leftWalk);
+    this.group.add(leftWalk);
 
     const rightWalk = new THREE.Mesh(sidewalkGeo, sidewalkMat);
     rightWalk.rotation.x = -Math.PI / 2;
     rightWalk.position.set(this.roadWidth / 2 + sidewalkWidth / 2, 0.03, -this.roadLength / 2);
     rightWalk.receiveShadow = true;
-    this.scene.add(rightWalk);
+    this.group.add(rightWalk);
 
     // ---- Buildings on both sides ----
     this._addBuildingRow(-(this.roadWidth / 2 + sidewalkWidth + 7));
@@ -119,7 +121,7 @@ export class StreetSystem {
       group.add(door);
 
       group.position.set(x, 0, z);
-      this.scene.add(group);
+      this.group.add(group);
     }
   }
 
@@ -146,7 +148,7 @@ export class StreetSystem {
     });
     this.lampPoleInstanced.instanceMatrix.needsUpdate = true;
     this.lampPoleInstanced.frustumCulled = true;
-    this.scene.add(this.lampPoleInstanced);
+    this.group.add(this.lampPoleInstanced);
 
     // Head instanced mesh
     this.lampHeadInstanced = new THREE.InstancedMesh(headGeo, headMat, count);
@@ -157,7 +159,7 @@ export class StreetSystem {
     });
     this.lampHeadInstanced.instanceMatrix.needsUpdate = true;
     this.lampHeadInstanced.frustumCulled = true;
-    this.scene.add(this.lampHeadInstanced);
+    this.group.add(this.lampHeadInstanced);
   }
 
   _addTrees() {
@@ -183,7 +185,7 @@ export class StreetSystem {
     });
     this.treeTrunkInstanced.instanceMatrix.needsUpdate = true;
     this.treeTrunkInstanced.frustumCulled = true;
-    this.scene.add(this.treeTrunkInstanced);
+    this.group.add(this.treeTrunkInstanced);
 
     // Leaves instanced mesh
     this.treeLeafInstanced = new THREE.InstancedMesh(leafGeo, leafMat, count);
@@ -194,7 +196,7 @@ export class StreetSystem {
     });
     this.treeLeafInstanced.instanceMatrix.needsUpdate = true;
     this.treeLeafInstanced.frustumCulled = true;
-    this.scene.add(this.treeLeafInstanced);
+    this.group.add(this.treeLeafInstanced);
   }
 
   _addMailboxes() {
@@ -222,7 +224,7 @@ export class StreetSystem {
     }
     this.mailboxBoxInstanced.instanceMatrix.needsUpdate = true;
     this.mailboxBoxInstanced.frustumCulled = true;
-    this.scene.add(this.mailboxBoxInstanced);
+    this.group.add(this.mailboxBoxInstanced);
 
     // Flag instanced mesh
     this.mailboxFlagInstanced = new THREE.InstancedMesh(flagGeo, flagMat, count);
@@ -237,7 +239,7 @@ export class StreetSystem {
     }
     this.mailboxFlagInstanced.instanceMatrix.needsUpdate = true;
     this.mailboxFlagInstanced.frustumCulled = true;
-    this.scene.add(this.mailboxFlagInstanced);
+    this.group.add(this.mailboxFlagInstanced);
   }
 
   // Follow camera behind and above the character, looking down the street.
@@ -246,5 +248,13 @@ export class StreetSystem {
     camera.position.copy(characterPos).add(offset);
     camera.lookAt(characterPos.x, characterPos.y + 1.2, characterPos.z + 6);
     camera.updateMatrixWorld();
+  }
+
+  show() {
+    this.group.visible = true;
+  }
+
+  hide() {
+    this.group.visible = false;
   }
 }
