@@ -43,6 +43,10 @@ export class MultiplayerSystem {
     // Client id from the previous session, used to restore last-known position on rejoin.
     this.rejoinId = localStorage.getItem('planetwood_client_id') || '';
 
+    // Auth token for WebSocket upgrade (JWT), persisted across sessions.
+    this.authTokenKey = 'planetwood_token';
+    this.authToken = localStorage.getItem(this.authTokenKey) || '';
+
     this._protoMsg = null;
     this._protoMsgFields = 0;
 
@@ -106,7 +110,13 @@ export class MultiplayerSystem {
   }
 
   _createSocket() {
-    this.socket = new WebSocket(this.servers[this.serverIndex], 'permessage-deflate');
+    let url = this.servers[this.serverIndex];
+    // Append auth token as query param if we have one stored.
+    if (this.authToken) {
+      const separator = url.includes('?') ? '&' : '?';
+      url = `${url}${separator}token=${encodeURIComponent(this.authToken)}`;
+    }
+    this.socket = new WebSocket(url, 'permessage-deflate');
     this.socket.binaryType = 'arraybuffer';
     this.socket.onopen = this._boundOpen;
     this.socket.onmessage = this._boundMessage;
@@ -126,7 +136,46 @@ export class MultiplayerSystem {
     this._onConnect();
   }
 
-  _close(force = true) {
+  _close(force = true, event) {
+    // Extract WebSocket CloseEvent (has numeric .code) from either argument position.
+    // onclose passes the CloseEvent as the first argument (force); it may also be
+    // passed explicitly as the second argument (event).
+    let closeEvent = null;
+    if (event && typeof event.code === 'number') {
+      closeEvent = event;
+    } else if (force && typeof force === 'object' && typeof force.code === 'number') {
+      closeEvent = force;
+    }
+
+    // Handle server close codes: AUTH_REQUIRED (4001), AUTH_INVALID (4002), RATE_LIMITED (4003)
+    if (closeEvent) {
+      if (closeEvent.code === 4001 || closeEvent.code === 4002) {
+        // Clear stored auth credentials and stop reconnecting — prompt user to log in.
+        this.authToken = '';
+        localStorage.removeItem(this.authTokenKey);
+        localStorage.removeItem('planetwood_client_id');
+        this.rejoinId = '';
+        if (this.onNotification) {
+          this.onNotification(
+            closeEvent.code === 4001
+              ? 'Authentication required — please log in to reconnect.'
+              : 'Invalid authentication — please log in again.'
+          );
+        }
+        clearInterval(this._retryInterval);
+        this.connected = false;
+        this.socketCreated = false;
+        return;
+      }
+      if (closeEvent.code === 4003) {
+        if (this.onNotification) {
+          this.onNotification('Rate limited by the server — please wait before reconnecting.');
+        }
+        // Fall through to normal retry logic; the server will accept the connection
+        // once the rate limit window resets.
+      }
+    }
+
     if (this.socketCreated) {
       ['onopen', 'onmessage', 'onclose', 'onerror'].forEach(k => { this.socket[k] = null; });
       clearInterval(this._pingInterval);
@@ -197,6 +246,11 @@ export class MultiplayerSystem {
       } else if (json.id && typeof json.id === 'string') {
         this.localID = json.id;
         this.localIDLength = this.localID.length;
+        // Persist the auth token issued by the server for reconnects.
+        if (json.token && typeof json.token === 'string') {
+          this.authToken = json.token;
+          localStorage.setItem(this.authTokenKey, json.token);
+        }
         // The join request must use the id from the previous session (loaded
         // from localStorage at construction) so the server can look up the
         // last-known position. Capture it before overwriting with the new id.

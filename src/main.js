@@ -17,7 +17,7 @@ import { PlayerAvatar } from './entities/PlayerAvatar.js';
 import { ProgressionSystem } from './systems/ProgressionSystem.js';
 import { QUESTS } from './data/quests.js';
 
-const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'ws://localhost:3005';
+const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'wss://localhost:3005';
 const FALLBACK_TIMEOUT = 5000;
 const LOAD_TIMEOUT = 5000;
 
