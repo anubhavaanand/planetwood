@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { QUEST_LABELS } from '../data/quests.js';
 
 // Messenger-style overlay: checklist panel (opened from top-right menu) +
 // side-button strip (music / appearance / emote) matching messenger's look.
@@ -115,12 +116,13 @@ export class QuestUI {
         borderBottom: q.completed ? 'none' : '1px solid #eee',
       });
 
+      const label = QUEST_LABELS[id] || q.description;
       const title = document.createElement('div');
       Object.assign(title.style, {
         color: q.completed ? '#999' : q.color || '#1a1a1a',
         fontWeight: '700', fontSize: '14px', marginBottom: '4px',
       });
-      title.textContent = q.description;
+      title.textContent = label;
 
       const progress = document.createElement('div');
       Object.assign(progress.style, {
@@ -147,6 +149,39 @@ export class QuestUI {
 
   togglePanel() {
     if (this.panelOpen) this.hidePanel(); else this.showPanel();
+  }
+
+  setQuestCompleted(questId, reward) {
+    const q = this.quests.get(questId);
+    if (!q) return;
+    q.completed = true;
+    const completionText = QUEST_COMPLETION_TEXT[questId] || 'Quest completed!';
+    this.uiAddRewardNotification(completionText, reward);
+    this._renderList();
+  }
+
+  uiAddRewardNotification(text, reward) {
+    const el = document.createElement('div');
+    Object.assign(el.style, {
+      position: 'fixed', top: '70px', right: '16px', width: '260px',
+      background: '#fff', border: '3px solid #333', borderRadius: '8px',
+      boxShadow: '0 6px 0 rgba(0,0,0,0.25)', padding: '12px', zIndex: '280',
+      fontFamily: "'Courier New', Courier, monospace",
+    });
+    const title = document.createElement('div');
+    title.textContent = 'QUEST COMPLETED';
+    Object.assign(title.style, { fontWeight: '700', color: '#1a1a1a', marginBottom: '6px' });
+    const body = document.createElement('div');
+    body.textContent = text;
+    Object.assign(body.style, { color: '#333', marginBottom: '6px', fontSize: '13px' });
+    const rewards = document.createElement('div');
+    rewards.textContent = `+${reward.xp} XP  +${reward.coins} coins  +${reward.reputation} rep`;
+    Object.assign(rewards.style, { color: '#d9936a', fontWeight: '700', fontSize: '12px' });
+    el.appendChild(title);
+    el.appendChild(body);
+    el.appendChild(rewards);
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
   }
 
   dispose() {

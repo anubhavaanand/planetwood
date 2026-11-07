@@ -29,13 +29,75 @@ export const QUESTS = [
         texts: [
           "One of my employees wrote this? I can't believe it... this... is...",
           "...hilarious. Wow, he's really roasting me. Maybe he's manager material after all...",
-          "Can you take this note back to him? He works in the main square.",
+          "What do you think of it?",
+        ],
+        choices: [
+          { label: "I thought it was funny.", tag: 'promote', nextStep: 'office-worker-promoted' },
+          { label: "It was a mistake. I shouldn't have taken it.", tag: 'apologize', nextStep: 'office-worker-demoted' },
+          { label: "[Stay silent.]", tag: 'silent', nextStep: 'boss-silent' },
         ],
         extraData: {
           uiTitle: 'Package Received',
           uiText: "Take the boss's note to the office worker in the main square",
           uiColor: '#c25959',
           receiveModel: 'deliveries/note.drc',
+        },
+      },
+      {
+        id: 'office-worker-promoted',
+        npc: 'office-worker',
+        ordered: true,
+        texts: [
+          "I'm getting... promoted?",
+          "Wow, who would have known that acting on my lowest instincts would help me advance in the corporate world.",
+        ],
+        extraData: {
+          uiTitle: 'Completed',
+          uiText: 'The corporate ladder accepts you. Promotion pending.',
+          uiColor: '#c25959',
+        },
+      },
+      {
+        id: 'office-worker-demoted',
+        npc: 'office-worker',
+        ordered: true,
+        texts: [
+          "I'm... demoted?",
+          "Well. At least the letter is gone. I'll need to be more careful next time.",
+        ],
+        extraData: {
+          uiTitle: 'Completed',
+          uiText: 'The corporate ladder has other plans for you.',
+          uiColor: '#c25959',
+        },
+      },
+      {
+        id: 'boss-silent',
+        npc: 'boss',
+        ordered: true,
+        texts: [
+          "Hmph. No comment? I'll take that as agreement.",
+          "Here's the note anyway. Deliver it to your friend in the square.",
+        ],
+        extraData: {
+          uiTitle: 'Package Received',
+          uiText: "Take the boss's note to the office worker in the main square",
+          uiColor: '#c25959',
+          receiveModel: 'deliveries/note.drc',
+        },
+      },
+      {
+        id: 'office-worker-silent',
+        npc: 'office-worker',
+        ordered: true,
+        texts: [
+          "So... he said nothing?",
+          "Well. At least I have the note back. Thanks, I suppose.",
+        ],
+        extraData: {
+          uiTitle: 'Completed',
+          uiText: 'The corporate ladder tolerates silence.',
+          uiColor: '#c25959',
         },
       },
       {
@@ -247,12 +309,23 @@ export const QUESTS = [
 ];
 
 // Display names used in the messenger checklist header line for each quest.
+// Progress counts are computed dynamically by QuestUI; do not hardcode here.
 export const QUEST_LABELS = {
-  'quest-employee': 'Falling off the corporate ladder (0/3)',
-  'quest-caveman': "A man who's hiding from something (0/3)",
-  'quest-scientists': 'Scientists and mixed-up deliveries (0/3)',
-  'quest-temple': "An offering to the mountain temple (0/2)",
-  'quest-musician': "A note lost at sea (0/2)",
+  'quest-employee': 'Falling off the corporate ladder',
+  'quest-caveman': "A man who's hiding from something",
+  'quest-scientists': 'Scientists and mixed-up deliveries',
+  'quest-temple': "An offering to the mountain temple",
+  'quest-musician': "A note lost at sea",
+};
+
+// Per-quest completion text shown when a quest is fully completed.
+// Replaces the generic "Congrats! Another successful delivery completed."
+export const QUEST_COMPLETION_TEXT = {
+  'quest-employee': 'The corporate ladder accepts you. Promotion pending.',
+  'quest-caveman': 'The cave is slightly less under-dressed now.',
+  'quest-scientists': 'Sixty-three noodle packets remain unclaimed.',
+  'quest-temple': 'The mountain accepts its offering.',
+  'quest-musician': 'Future Dave is very proud of his hair.',
 };
 
 // NPC -> npcType mapping used by NPCSystem._extractNPCData, so quests can find

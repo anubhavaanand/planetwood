@@ -26,8 +26,11 @@ export class DialogueSystem {
     this.currentNpc = null;
     this.currentStep = null;
     this.textIndex = 0;
+    this.showingChoices = false;
+    this.choiceButtons = [];
     this.onNpcInteract = null; // (npc) => void, set by main to open dialogue
     this.onStepComplete = null; // (questId, stepId) => void
+    this.onStepChoice = null; // (questId, nextStepId) => void, for branch selection
 
     this._buildUI();
     this.close();
@@ -99,7 +102,16 @@ export class DialogueSystem {
     box.appendChild(nameEl);
     box.appendChild(textEl);
 
-    // continue button
+    // choices container (shown when step has choices)
+    const choicesContainer = document.createElement('div');
+    choicesContainer.id = 'dialogue-choices';
+    Object.assign(choicesContainer.style, {
+      position: 'absolute', bottom: '18px', left: '128px', right: '24px',
+      display: 'flex', flexDirection: 'column', gap: '8px', pointerEvents: 'none',
+    });
+    box.appendChild(choicesContainer);
+
+    // continue button (hidden when showing choices)
     const cont = document.createElement('button');
     cont.id = 'dialogue-continue';
     cont.textContent = '▶';
@@ -129,6 +141,55 @@ export class DialogueSystem {
     this.nameEl = nameEl;
     this.textEl = textEl;
     this.continueBtn = cont;
+    this.choicesContainer = choicesContainer;
+  }
+
+  _clearChoices() {
+    this.choiceButtons.forEach(btn => btn.remove());
+    this.choiceButtons = [];
+    this.showingChoices = false;
+    this.continueBtn.style.display = '';
+  }
+
+  _showChoices(step) {
+    this._clearChoices();
+    this.showingChoices = true;
+    this.continueBtn.style.display = 'none';
+
+    step.choices.forEach(choice => {
+      const btn = document.createElement('button');
+      btn.textContent = choice.label;
+      Object.assign(btn.style, {
+        width: '100%', padding: '10px 14px', borderRadius: '6px',
+        background: '#e8e8e8', border: '2px solid #333', color: '#1a1a1a',
+        fontSize: '15px', fontWeight: '600', cursor: 'pointer',
+        textAlign: 'left', boxShadow: '0 3px 0 rgba(0,0,0,0.25)',
+      });
+      btn.addEventListener('click', () => this._selectChoice(choice));
+      btn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._selectChoice(choice); }
+      });
+      btn.setAttribute('tabindex', '0');
+      btn.setAttribute('aria-label', choice.label);
+      this.choicesContainer.appendChild(btn);
+      this.choiceButtons.push(btn);
+    });
+  }
+
+  _selectChoice(choice) {
+    this._clearChoices();
+    if (choice.nextStep) {
+      // Notify main to resolve the next step via QuestSystem.selectNextStep
+      if (this.onStepChoice && this.currentNpc) {
+        this.onStepChoice(this.currentNpc.questId, choice.nextStep);
+        return;
+      }
+    }
+    // Fallback — no handler or no next step — treat as step complete
+    if (this.onStepComplete && this.currentNpc) {
+      this.onStepComplete(this.currentNpc.questId, this.currentStep?.id || 'unknown');
+    }
+    this.close();
   }
 
   setNpcColors(npcType) {
@@ -140,6 +201,7 @@ export class DialogueSystem {
     this.currentNpc = npc;
     this.currentStep = null;
     this.textIndex = 0;
+    this.showingChoices = false;
     this.active = true;
     this.container.style.display = '';
     this.container.style.pointerEvents = 'auto';
@@ -151,19 +213,25 @@ export class DialogueSystem {
     this.currentNpc = null;
     this.currentStep = null;
     this.textIndex = 0;
+    this.showingChoices = false;
+    this._clearChoices();
     this.container.style.display = 'none';
     this.container.style.pointerEvents = 'none';
   }
 
   advance() {
     if (!this.active) return;
+    if (this.showingChoices) return; // must make a choice to proceed
     if (this.currentStep && this.textIndex < this.currentStep.texts.length - 1) {
       this.textIndex++;
       this._renderText();
+      if (this.currentStep.choices && this.textIndex === this.currentStep.texts.length - 1) {
+        this._showChoices(this.currentStep);
+      }
       return;
     }
-    // step finished
-    if (this.currentStep && this.onStepComplete) {
+    // No choices — step finished
+    if (this.currentStep && !this.currentStep.choices && this.onStepComplete) {
       this.onStepComplete(this.currentNpc.questId, this.currentStep.id);
     }
     this.close();
@@ -185,13 +253,9 @@ export class DialogueSystem {
     this.textIndex = 0;
     this.setNpcColors(npc.npcType);
     this._renderText();
-  }
-
-  _renderText() {
-    if (!this.currentStep) return;
-    const step = this.currentStep;
-    this.nameEl.textContent = this.currentNpc.displayName || this.currentNpc.id;
-    this.textEl.textContent = step.texts[this.textIndex] || '';
+    if (step.choices) {
+      this._showChoices(step);
+    }
   }
 
   update(delta) {
