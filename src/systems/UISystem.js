@@ -123,6 +123,17 @@ export class UISystem {
         entries.forEach(el => el.remove());
         this.addNotification(`Blocked player: ${senderName}`);
       });
+      blockBtn.setAttribute('tabindex', '0');
+      blockBtn.setAttribute('aria-label', `Block ${senderName}`);
+      blockBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.blockedPlayers.add(senderId);
+          const entries = this.logEl.querySelectorAll(`.chat-entry[data-sender-id="${senderId}"]`);
+          entries.forEach(el => el.remove());
+          this.addNotification(`Blocked player: ${senderName}`);
+        }
+      });
       entry.appendChild(blockBtn);
     }
 

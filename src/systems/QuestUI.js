@@ -91,6 +91,14 @@ export class QuestUI {
       fontSize: '20px', cursor: 'pointer',
     });
     close.addEventListener('click', () => this.hidePanel());
+    close.setAttribute('tabindex', '0');
+    close.setAttribute('aria-label', 'Close checklist');
+    close.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.hidePanel();
+      }
+    });
 
     panel.appendChild(header);
     panel.appendChild(list);
@@ -162,6 +170,8 @@ export class QuestUI {
 
   uiAddRewardNotification(text, reward) {
     const el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'polite');
     Object.assign(el.style, {
       position: 'fixed', top: '70px', right: '16px', width: '260px',
       background: '#fff', border: '3px solid #333', borderRadius: '8px',

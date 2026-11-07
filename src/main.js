@@ -170,6 +170,7 @@ async function initCore() {
     if (avatar) {
       ui.addNameplate(avatar, data.displayName);
     }
+    srAnnounce(`${data.displayName || 'Player'} joined`, 'polite');
   };
 
   multiplayer.onPlayerLeft = (id) => {
@@ -177,17 +178,21 @@ async function initCore() {
     if (avatar) {
       ui.removeNameplate(avatar);
     }
+    const name = avatar ? avatar.displayName : 'Player';
+    srAnnounce(`${name} left`, 'polite');
   };
 
   multiplayer.onChatMessage = (data) => {
     if (data.senderId === multiplayer.localID) return;
     ui.addChatMessage(data.senderName || 'Player', data.text, data.senderId);
+    srAnnounce(`New message from ${data.senderName || 'Player'}: ${data.text}`, 'polite');
   };
 
   multiplayer.onEmote = (id, type) => {
     const avatar = multiplayer.players.get(id);
     if (avatar) {
       avatar.playAnimation(type === 'wave' ? 'wave' : type === 'stretch' ? 'stretch' : 'look');
+      srAnnounce(`${avatar.displayName} performed ${type} emote`, 'polite');
       setTimeout(() => {
         if (avatar.animationState === type) {
           avatar.playAnimation('idle');
@@ -198,6 +203,8 @@ async function initCore() {
 
   multiplayer.onNotification = (text) => {
     ui.addNotification(text);
+    const urgent = text.includes('disconnected') || text.includes('disconnect');
+    srAnnounce(text, urgent ? 'assertive' : 'polite');
   };
 
   dialogueSys.onStepComplete = (questId, stepId) => {
@@ -206,6 +213,7 @@ async function initCore() {
 
   progressionSys.onLevelUp = (oldLevel, newLevel) => {
     ui.addNotification(`Level Up! You are now level ${newLevel}`);
+    srAnnounce(`Level up! You are now level ${newLevel}`, 'polite');
   };
 
   progressionSys.onCoinsChange = (coins) => {
@@ -215,6 +223,7 @@ async function initCore() {
 
   progressionSys.onReputationChange = (npcType, rep, tier) => {
     ui.addNotification(`${npcType} reputation: ${tier.name} (${rep})`);
+    srAnnounce(`${npcType} reputation: ${tier.name} (${rep})`, 'polite');
   };
 
   // Handle player choice branches in dialogue
@@ -233,10 +242,12 @@ async function initCore() {
 
   questUI.onItemReceived = (extraData) => {
     ui.addNotification(`Received: ${extraData.uiTitle || 'Item'}`);
+    srAnnounce(`Received: ${extraData.uiTitle || 'Item'}`, 'polite');
     if (extraData.uiText) ui.addNotification(extraData.uiText);
   };
   questUI.onQuestCompleted = (questId) => {
     ui.addNotification('Quest completed!');
+    srAnnounce('Quest completed!', 'polite');
   };
 
   ui.addNameplate(playerAvatar, 'You', true);
@@ -245,6 +256,7 @@ async function initCore() {
   function triggerLocalEmote(type) {
     if (!playerAvatar) return;
     playerAvatar.playAnimation(type);
+    srAnnounce(`You performed ${type} emote`, 'polite');
     if (multiplayer?.connected) {
       multiplayer.sendEmote(type);
     }
@@ -439,9 +451,10 @@ function updateLoading(text, percent) {
   if (loadingProgress) loadingProgress.style.width = percent + '%';
 }
 
-function srAnnounce(text) {
+function srAnnounce(text, politeness = 'polite') {
   const el = document.getElementById('sr-announce');
   if (el) {
+    el.setAttribute('aria-live', politeness);
     el.textContent = '';
     requestAnimationFrame(() => { el.textContent = text; });
   }
