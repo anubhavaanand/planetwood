@@ -13,6 +13,7 @@ const FACE_COLORS = {
   mountainman: '#8cc48c',
   diver: '#66BDE6',
   musician: '#de794e',
+  'planet-guardian': '#44aaff',
   default: '#9ab0b4',
 };
 

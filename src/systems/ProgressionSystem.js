@@ -10,6 +10,9 @@ export const REPUTATION_TIERS = [
   { name: 'Best Friend', min: 100 },
 ];
 
+const STORAGE_KEY = 'planetwood.progression';
+const STORAGE_VERSION = 1;
+
 export class ProgressionSystem {
   constructor() {
     // Per-NPC reputation points
@@ -30,6 +33,65 @@ export class ProgressionSystem {
     this.onDeliveryItemRemoved = null; // (itemId) => void
   }
 
+  _defaultState() {
+    return {
+      reputation: {},
+      level: 1,
+      xp: 0,
+      xpToNext: XP_PER_LEVEL,
+      coins: 0,
+    };
+  }
+
+  // Serialize progression state to localStorage.
+  save() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const payload = {
+        version: STORAGE_VERSION,
+        reputation: Object.fromEntries(this.reputation),
+        level: this.level,
+        xp: this.xp,
+        xpToNext: this.xpToNext,
+        coins: this.coins,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // localStorage unavailable or quota exceeded — silently ignore
+    }
+  }
+
+  // Deserialize persisted progression from localStorage and apply it to this
+  // instance. Returns the loaded state (defaults when nothing is saved or the
+  // saved format is unrecognized, e.g. after a schema migration).
+  load() {
+    let state = null;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        state = raw ? JSON.parse(raw) : null;
+      }
+    } catch {
+      state = null;
+    }
+
+    if (!state || state.version !== STORAGE_VERSION) {
+      state = this._defaultState();
+    }
+
+    this.reputation = new Map(
+      Object.entries(
+        state.reputation && typeof state.reputation === 'object' ? state.reputation : {}
+      )
+    );
+    this.level = typeof state.level === 'number' ? state.level : 1;
+    this.xp = typeof state.xp === 'number' ? state.xp : 0;
+    this.xpToNext = typeof state.xpToNext === 'number' ? state.xpToNext : XP_PER_LEVEL;
+    this.coins = typeof state.coins === 'number' ? state.coins : 0;
+
+    return state;
+  }
+
   getReputation(npcType) {
     return this.reputation.get(npcType) || 0;
   }
@@ -48,6 +110,7 @@ export class ProgressionSystem {
     this.reputation.set(npcType, newRep);
     const tier = this.getTier(npcType);
     if (this.onReputationChange) this.onReputationChange(npcType, newRep, tier);
+    this.save();
     return tier;
   }
 
@@ -63,12 +126,14 @@ export class ProgressionSystem {
     if (leveledUp && this.onLevelUp) {
       this.onLevelUp(this.level - (leveledUp ? 1 : 0), this.level);
     }
+    this.save();
     return leveledUp;
   }
 
   addCoins(amount) {
     this.coins += amount;
     if (this.onCoinsChange) this.onCoinsChange(this.coins);
+    this.save();
   }
 
   // Delivery bag operations
@@ -76,6 +141,7 @@ export class ProgressionSystem {
     const item = { itemId, npcType, displayName, receivedAt: Date.now() };
     this.deliveryBag.push(item);
     if (this.onDeliveryItemAdded) this.onDeliveryItemAdded(item);
+    this.save();
     return item;
   }
 
@@ -84,6 +150,7 @@ export class ProgressionSystem {
     if (idx === -1) return null;
     const item = this.deliveryBag.splice(idx, 1)[0];
     if (this.onDeliveryItemRemoved) this.onDeliveryItemRemoved(itemId);
+    this.save();
     return item;
   }
 
