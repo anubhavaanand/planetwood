@@ -96,8 +96,6 @@ export class MultiplayerSystem {
     this.onChatMessage = null;
     this.onEmote = null;
     this.onNotification = null;
-    this.onRemoteCarriedItemsChange = null; // (peerId, itemIds) => void
-    this.onTradeMessage = null; // (fromPeerId, type, payload) => void; type: 'offer'|'accept'|'reject'
     // Fired when the server restores a last-known position on rejoin: { p, r }.
     this.onRestoredPosition = null;
 
@@ -229,12 +227,6 @@ export class MultiplayerSystem {
             if (msg[k] instanceof Array && msg[k].length === 0) return;
             client[k] = msg[k];
           });
-          if (msg.carriedItems !== undefined && this.onRemoteCarriedItemsChange) {
-            const prev = client.carriedItems; // already overwritten, but msg.carriedItems is the new value
-            if (!prev || JSON.stringify(prev) !== JSON.stringify(msg.carriedItems)) {
-              this.onRemoteCarriedItemsChange(localIdStr, msg.carriedItems);
-            }
-          }
         } else {
           if (this.clients.size >= this.clientsLimit ||
               keys.reduce((h, d) => (msg[d] instanceof Array && msg[d].length === 0 ? h : h + 1), 0) !== this._protoMsgFields) {
@@ -312,10 +304,6 @@ export class MultiplayerSystem {
       } else if (json.type === 'peer_left') {
         const { id } = json.payload || {};
         if (id) this._closePeerConnection(id);
-      } else if (json.type === 'trade') {
-        if (this.onTradeMessage) {
-          this.onTradeMessage(json.from || json.to, json.tradeType, json.payload || {});
-        }
       }
     } catch {}
   }
@@ -782,33 +770,6 @@ export class MultiplayerSystem {
     }
     this.players.clear();
     this.connected = false;
-  }
-
-  // Send a trade message to a specific peer via JSON WebSocket message.
-  // type: 'offer' | 'accept' | 'reject'
-  sendTrade(toPeerId, type, payload) {
-    if (!this.connected) return;
-    this._sendJson({
-      type: 'trade',
-      to: toPeerId,
-      tradeType: type,
-      payload: payload || {},
-      timestamp: Date.now(),
-    });
-  }
-
-  // Set the local player's carried delivery items (modelIds) and broadcast the
-  // change to all peers. Called by DeliveryItemSystem on receive/deliver/trade.
-  setCarriedItems(itemIds) {
-    this._data.carriedItems = Array.from(itemIds || []);
-    this._relay(true);
-  }
-
-  // Return the carried item modelIds for a remote player, or empty array.
-  getRemoteCarriedItems(peerId) {
-    const client = this.clients.get(peerId);
-    if (!client || !Array.isArray(client.carriedItems)) return [];
-    return client.carriedItems;
   }
 
   _log(...args) {
