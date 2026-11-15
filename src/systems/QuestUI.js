@@ -12,8 +12,6 @@ export class QuestUI {
     this.panelOpen = false;
     this.onItemReceived = null;
     this.onQuestCompleted = null;
-    this.onPrestigeUnlocked = null;
-    this._prestigeAvailable = false; // () => void, fired when 5+ street quests complete
 
     this._buildSidebar();
     this._buildChecklistPanel();
@@ -81,24 +79,6 @@ export class QuestUI {
       color: '#1a1a1a', borderBottom: '1px solid #ccc',
     });
 
-    // Prestige activate button — shown when endgame is unlocked.
-    const prestigeBtn = document.createElement('button');
-    prestigeBtn.id = 'checklist-prestige';
-    prestigeBtn.textContent = '★ PRESTIGE ★';
-    Object.assign(prestigeBtn.style, {
-      float: 'right', margin: '0 16px 8px',
-      padding: '6px 12px', fontSize: '12px', fontWeight: '700',
-      color: '#fff', background: '#44aaff', border: '3px solid #333',
-      borderRadius: '6px', cursor: 'pointer', boxShadow: '0 3px 0 rgba(0,0,0,0.25)',
-      fontFamily: "'Courier New', Courier, monospace",
-      display: 'none',
-    });
-    prestigeBtn.setAttribute('aria-label', 'Prestige: reset quests for a lasting multiplier');
-    prestigeBtn.addEventListener('click', () => {
-      if (this.onPrestigeActivate) this.onPrestigeActivate();
-    });
-    header.appendChild(prestigeBtn);
-
     const list = document.createElement('div');
     list.id = 'checklist-list';
     Object.assign(list.style, { padding: '10px 16px 16px', fontSize: '14px', lineHeight: '1.9' });
@@ -127,7 +107,6 @@ export class QuestUI {
 
     this.panel = panel;
     this.list = list;
-    this.prestigeBtn = panel.querySelector('#checklist-prestige');
   }
 
   setQuests(quests) {
@@ -137,21 +116,6 @@ export class QuestUI {
 
   _renderList() {
     this.list.innerHTML = '';
-    // Prestige button visible when endgame is unlocked.
-    if (this.prestigeBtn) {
-      this.prestigeBtn.style.display = this._prestigeAvailable ? '' : 'none';
-    }
-    // Endgame indicator: prestige available banner at top of checklist.
-    if (this._prestigeAvailable) {
-      const banner = document.createElement('div');
-      Object.assign(banner.style, {
-        padding: '10px 16px', marginBottom: '10px',
-        background: '#44aaff', color: '#fff', fontWeight: '700', fontSize: '13px',
-        borderRadius: '6px', textAlign: 'center',
-      });
-      banner.textContent = '★ PRESTIGE AVAILABLE ★ — Speak to the Planet Guardian';
-      this.list.appendChild(banner);
-    }
     for (const [id, q] of this.quests) {
       const done = q.steps.filter((s) => s.completed).length;
       const row = document.createElement('div');
