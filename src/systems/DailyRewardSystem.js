@@ -23,7 +23,7 @@ const DAILY_REWARDS = [
 const MAX_STREAK = 7;
 
 function _todayISO() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Date().toISOString().split('T')[0]; // UTC YYYY-MM-DD
 }
 
 function _yesterdayISO() {

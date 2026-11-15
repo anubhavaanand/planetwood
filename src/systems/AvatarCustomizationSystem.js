@@ -126,7 +126,7 @@ export class AvatarCustomizationSystem {
   isSlotUnlocked(slot) {
     const req = this.slotUnlockRequirements[slot];
     if (!req) return false;
-    if (!this.progressionSys) return true; // no progression system wired — treat as unlocked
+    if (!this.progressionSys) return false; // no progression system wired — treat as locked
     let bestRep = 0;
     for (const rep of this.progressionSys.reputation.values()) {
       if (rep > bestRep) bestRep = rep;

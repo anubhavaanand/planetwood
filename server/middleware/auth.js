@@ -5,7 +5,14 @@
 
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'planetwood-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable required in production');
+  }
+  // Dev fallback
+  JWT_SECRET = 'planetwood-dev-secret-change-in-production';
+}
 const JWT_ISSUER = 'planetwood-relay';
 const JWT_AUDIENCE = 'planetwood-client';
 const TOKEN_EXPIRY_SECONDS = 8 * 60 * 60; // 8 hours

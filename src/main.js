@@ -52,6 +52,16 @@ let fallbackTimer = null;
 let progressionSys = null;
 let dailyRewardSys = null;
 
+// Module-scoped UI helpers so the intro/tutorial flow can reach them.
+// Previously these were `const`s inside initCore(), which made calls from
+// finishIntro()/completeTutorial() throw ReferenceError and abort the flow.
+let _updateAppearanceButtonVisibility = () => {};
+let _updateShopButtonVisibility = () => {};
+
+// Customization panel element, created in initCore(); referenced by the
+// module-scoped appearance-button helper so it survives past initCore's scope.
+let customizationContainer = null;
+
 // State for the active trade flow (who we're trading with and what we selected).
 let tradeState = null; // { peerId, peerName, role: 'initiator' | 'receiver', localItems, remoteItems }
 
@@ -190,7 +200,7 @@ async function initCore() {
       srAnnounce(`Reach ${req.minTier} tier with an NPC to unlock ${slot}`, 'polite');
     };
 
-    const customizationContainer = _setupCustomizationUI();
+    customizationContainer = _setupCustomizationUI();
 
     sceneSys.scene.add(playerAvatar.group);
   }
@@ -379,14 +389,15 @@ async function initCore() {
   });
   document.body.appendChild(appearanceBtn);
 
-  const _updateAppearanceButtonVisibility = () => {
+  const _setAppearanceButtonVisibility = () => {
     appearanceBtn.style.display = gameState === 'playing' ? '' : 'none';
     if (gameState !== 'playing') {
       customizationContainer.style.display = 'none';
       appearanceBtn.textContent = 'Appearance';
     }
   };
-  ui._updateAppearanceButtonVisibility = _updateAppearanceButtonVisibility;
+  _updateAppearanceButtonVisibility = _setAppearanceButtonVisibility;
+  ui._updateAppearanceButtonVisibility = _setAppearanceButtonVisibility;
 
   // Shop button — opens/closes the avatar shop panel.
   const shopBtn = document.createElement('button');
@@ -408,11 +419,12 @@ async function initCore() {
 
   // Show the shop button once the game reaches playing state; expose toggle so
   // the shop panel can update the button text when opened/closed programmatically.
-  const _updateShopButtonVisibility = () => {
+  const _setShopButtonVisibility = () => {
     shopBtn.style.display = gameState === 'playing' ? '' : 'none';
     if (gameState !== 'playing') ui.hideShop();
   };
-  ui._updateShopButtonVisibility = _updateShopButtonVisibility;
+  _updateShopButtonVisibility = _setShopButtonVisibility;
+  ui._updateShopButtonVisibility = _setShopButtonVisibility;
 
   ui.onSendChat = (text) => {
     if (!chatSys.canSend()) return;
@@ -529,7 +541,8 @@ async function initCore() {
   }
 
   updateLoading('Ready!', 100);
-  setTimeout(() => { loadingEl.style.display = 'none'; showTitle(); }, 400);
+  loadingEl.style.display = 'none';
+  if (!document.getElementById('title-screen')) showTitle();
 
   // Start with the street visible and the planet hidden; the transition
   // activates when the player crosses z > 160.
@@ -543,6 +556,12 @@ async function initCore() {
 // is not added to the scene — we render the street instead.
 
 function showTitle() {
+  // Idempotent: remove any existing title screen before creating a new one.
+  // This happens when initCore() completes after init()'s timeout catch already
+  // called showTitle(), or when showTitle() is called from multiple code paths.
+  const existing = document.getElementById('title-screen');
+  if (existing) existing.remove();
+
   gameState = 'title';
   const title = document.createElement('div');
   title.id = 'title-screen';
@@ -1144,8 +1163,10 @@ function animate() {
   }
 
   // Camera mode: 2.5D follow on the street, orbit controls on the planet.
-  // Planet transition is gated behind playing state so the tutorial stays on the street.
-  if (playing && playerAvatar) {
+  // The follow camera must also run during the tutorial — otherwise the camera
+  // stays parked at its init position, the player avatar sits outside the
+  // frustum, and CSS2DRenderer never attaches the local "You (You)" nameplate.
+  if (canMove && playerAvatar) {
     const playerZ = playerAvatar.group.position.z;
 
     // Transition to planet scene when crossing z > 160.

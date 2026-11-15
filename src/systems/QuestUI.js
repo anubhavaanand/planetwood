@@ -95,7 +95,9 @@ export class QuestUI {
     });
     prestigeBtn.setAttribute('aria-label', 'Prestige: reset quests for a lasting multiplier');
     prestigeBtn.addEventListener('click', () => {
-      if (this.onPrestigeActivate) this.onPrestigeActivate();
+      if (confirm('Reset ALL quest progress? This cannot be undone.')) {
+        if (this.onPrestigeActivate) this.onPrestigeActivate();
+      }
     });
     header.appendChild(prestigeBtn);
 

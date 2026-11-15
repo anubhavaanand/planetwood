@@ -30,10 +30,14 @@ export class SceneSystem {
     // Performance tier detection for integrated GPUs (e.g., Intel Iris Plus)
     const isLowEnd = this._detectLowEndDevice();
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: !isLowEnd });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(isLowEnd ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
+    // On low-end / software rasterizers the fragment cost dominates, so render at
+    // reduced internal resolution and let CSS upscale the canvas.
+    const pixelRatio = isLowEnd ? 0.75 : Math.min(window.devicePixelRatio, 2);
+    this.renderer.setPixelRatio(pixelRatio);
+    this._pixelRatio = pixelRatio;
+    this.renderer.shadowMap.enabled = !isLowEnd;
     this.renderer.shadowMap.type = isLowEnd ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = isLowEnd ? THREE.LinearToneMapping : THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
@@ -92,16 +96,51 @@ export class SceneSystem {
   }
 
   _detectLowEndDevice() {
-    // Heuristic for integrated/low-end GPUs (e.g., Intel Iris Plus, UHD)
+    // Heuristic for integrated/low-end GPUs (e.g., Intel Iris Plus, UHD) and for
+    // software rasterizers (SwiftShader / llvmpipe), which are the slowest path of all.
+    //
+    // gl.RENDERER / gl.VENDOR return the MASKED strings ("WebKit WebGL" / "WebKit")
+    // in Chromium, so the unmasked values from WEBGL_debug_renderer_info are the only
+    // reliable source of the real GPU identity. Masked strings alone would leave
+    // isLowEnd false on a pure-CPU rasterizer, enabling full-res bloom + PCF soft
+    // shadows and dragging the game down to ~1 FPS.
+    //
+    // Operators can force the tier (e.g. for CI or for a weak GPU we do not recognise):
+    //   localStorage.setItem('planetwood.forceQuality', 'low' | 'high')
+    //   ?quality=low  /  ?quality=high   (URL query, takes precedence)
+    try {
+      const forced = new URLSearchParams(window.location.search).get('quality')
+        || window.localStorage.getItem('planetwood.forceQuality');
+      if (forced === 'low') return true;
+      if (forced === 'high') return false;
+    } catch { /* localStorage unavailable (private mode) */ }
+
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) return true;
-    const renderer = gl.getParameter(gl.RENDERER) || '';
-    const vendor = gl.getParameter(gl.VENDOR) || '';
+
+    let renderer = gl.getParameter(gl.RENDERER) || '';
+    let vendor = gl.getParameter(gl.VENDOR) || '';
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    if (dbg) {
+      renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || renderer;
+      vendor = gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || vendor;
+    }
+    const combined = `${renderer} ${vendor}`.toLowerCase();
+
+    // Software rasterizers: always low-end.
+    const softwareKeywords = [
+      'swiftshader', 'llvmpipe', 'softpipe', 'software rasterizer', 'software',
+      'mesa offscreen', 'microsoft basic render', 'basic render driver',
+    ];
+    if (softwareKeywords.some(k => combined.includes(k))) return true;
+
     const lowEndKeywords = ['iris plus', 'uhd', 'hd graphics', 'integrated', 'intel hd', 'intel(r) hd'];
-    const combined = (renderer + ' ' + vendor).toLowerCase();
     if (lowEndKeywords.some(k => combined.includes(k))) return true;
-    // Also treat low RAM devices as low-end
+
+    // Low core count / low memory also implies a weak device.
+    const cores = navigator.hardwareConcurrency || 8;
+    if (cores && cores <= 2) return true;
     if (navigator.deviceMemory && navigator.deviceMemory <= 4) return true;
     return false;
   }
@@ -134,7 +173,7 @@ export class SceneSystem {
 
     const sun = new THREE.DirectionalLight(0xFFEECC, 1.8);
     sun.position.set(30, 40, 20);
-    sun.castShadow = true;
+    sun.castShadow = !this._isLowEnd; // shadow map pass is pure fragment work; skip it when low-end
     const shadowSize = this._isLowEnd ? 1024 : 2048;
     sun.shadow.mapSize.width = shadowSize;
     sun.shadow.mapSize.height = shadowSize;
@@ -272,7 +311,14 @@ export class SceneSystem {
   }
 
   render() {
-    this.composer.render();
+    // Skip the post-processing composer entirely on low-end/software rasterizers.
+    // EffectComposer adds a full-screen render-target copy per pass even when no pass
+    // is enabled, which doubles the fragment cost for zero visual gain there.
+    if (this._isLowEnd) {
+      this.renderer.render(this.scene, this.camera);
+    } else {
+      this.composer.render();
+    }
     this.labelRenderer.render(this.scene, this.camera);
   }
 

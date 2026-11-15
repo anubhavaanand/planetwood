@@ -700,7 +700,7 @@ export class UISystem {
     const level = this.progressionSys?.level ?? 1;
     const coins = this.progressionSys?.coins ?? 0;
     const owned = (id) => this.avatarCustomization?.isOwned(id) ?? false;
-    const slotUnlocked = (slot) => this.avatarCustomization?.isSlotUnlocked(slot) ?? true;
+    const slotUnlocked = (slot) => this.avatarCustomization?.isSlotUnlocked(slot) ?? false;
 
     items.forEach((item) => {
       const levelMet = level >= item.requiredLevel;
