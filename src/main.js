@@ -311,9 +311,9 @@ async function initCore() {
   };
 
   // Handle player choice branches in dialogue
-  dialogueSys.onStepChoice = (questId, nextStepId) => {
+  dialogueSys.onStepChoice = (questId, nextStepId, branchTag) => {
     if (questSys) {
-      const stepData = questSys.selectNextStep(questId, nextStepId);
+      const stepData = questSys.selectNextStep(questId, nextStepId, branchTag);
       if (stepData) {
         // Re-open dialogue with the chosen step
         const npc = npcSys?.npcs.find(n => n.id === dialogueSys.currentNpc?.id);
@@ -324,7 +324,7 @@ async function initCore() {
     }
   };
 
-  questSys.onQuestCompleted = (questId) => {
+  questSys.onQuestCompleted = (questId, reward) => {
     ui.addNotification('Quest completed!');
     srAnnounce('Quest completed!', 'polite');
   };
