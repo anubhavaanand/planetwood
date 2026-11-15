@@ -135,7 +135,6 @@ async function initCore() {
   updateLoading('Animations loaded', 40);
 
   updateLoading('Loading planet models...', 45);
-  await planetSys.init();
   planetSysReady = true;
   updateLoading('Planet models loaded', 50);
 
@@ -175,6 +174,8 @@ async function initCore() {
     playerAvatar.playAnimation('idle');
 
     // Avatar customization system — mix-and-match accessories persisted to localStorage.
+    progressionSys = new ProgressionSystem();
+    progressionSys.load();
     avatarCustomization = new AvatarCustomizationSystem(playerAvatar, meshLoader, animSys, animData);
     avatarCustomization.progressionSys = progressionSys;
     await avatarCustomization.load();
@@ -205,8 +206,6 @@ async function initCore() {
     playerAvatar, meshLoader
   );
   dialogueSys = new DialogueSystem(sceneSys.scene, sceneSys.camera, sceneSys.renderer);
-  progressionSys = new ProgressionSystem();
-  progressionSys.load();
   questSys = new QuestSystem(questUI, progressionSys);
 
   // Daily reward system — track login streak and grant escalating rewards.
@@ -252,7 +251,11 @@ async function initCore() {
     }
   };
 
-  multiplayer.connect();
+  try {
+    multiplayer.connect();
+  } catch (e) {
+    console.error('[initCore] Multiplayer connect failed:', e);
+  }
 
   multiplayer.onPlayerJoined = (data) => {
     const avatar = multiplayer.players.get(data.id);
