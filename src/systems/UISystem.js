@@ -15,6 +15,12 @@ export class UISystem {
     this.onTradeCancel = null; // () => void
     this.blockedPlayers = new Set();
     this.interactPrompts = new Map();
+    // Trade UI state
+    this.tradeContainer = null;
+    this.tradeVisible = false;
+    this._tradeElements = null;
+    this._tradePeerId = null;
+    this._tradeSelected = { offer: new Set(), request: new Set() };
     // Shop UI state
     this.shopContainer = null;
     this.shopVisible = false;
@@ -675,4 +681,328 @@ export class UISystem {
     }
     this.interactPrompts.clear();
   }
+
+  // ============================ Daily Reward UI ============================
+
+  _setupDailyRewardUI() {
+    const container = document.createElement('div');
+    container.id = 'daily-reward-ui';
+    Object.assign(container.style, {
+      position: 'fixed', bottom: '20px', left: '20px',
+      width: '280px', zIndex: '310', display: 'none',
+      fontFamily: 'system-ui, sans-serif',
+    });
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: 'rgba(30,40,42,0.95)', border: '1px solid rgba(217, 147, 106, 0.5)',
+      borderRadius: '12px', padding: '16px', boxSizing: 'border-box',
+      backdropFilter: 'blur(8px)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      marginBottom: '10px',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Daily Reward';
+    Object.assign(title.style, {
+      fontSize: '15px', fontWeight: '700', color: '#e8dccc',
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    Object.assign(closeBtn.style, {
+      background: 'transparent', border: 'none', color: '#9ab0b4',
+      fontSize: '18px', cursor: 'pointer', lineHeight: '1',
+    });
+    closeBtn.addEventListener('click', () => this.hideDailyReward());
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    const streakInfo = document.createElement('div');
+    streakInfo.id = 'daily-streak-info';
+    Object.assign(streakInfo.style, {
+      fontSize: '13px', color: '#c8d4d8', marginBottom: '12px',
+    });
+    card.appendChild(streakInfo);
+
+    const rewardInfo = document.createElement('div');
+    rewardInfo.id = 'daily-reward-info';
+    Object.assign(rewardInfo.style, {
+      fontSize: '13px', color: '#fcd436', fontWeight: '700',
+      marginBottom: '14px', minHeight: '20px',
+    });
+    card.appendChild(rewardInfo);
+
+    const claimBtn = document.createElement('button');
+    claimBtn.id = 'daily-claim-btn';
+    claimBtn.textContent = 'Claim Daily Reward';
+    claimBtn.setAttribute('aria-label', 'Claim daily login reward');
+    Object.assign(claimBtn.style, {
+      width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none',
+      background: '#d9936a', color: '#1e282a', fontSize: '0.95rem',
+      fontWeight: '700', cursor: 'pointer', outline: 'none',
+    });
+    claimBtn.addEventListener('click', () => {
+      if (this.dailyRewardSys && this.dailyRewardSys.claimDailyReward) {
+        const result = this.dailyRewardSys.claimDailyReward(this.dailyRewardProgressionSys);
+        if (result) {
+          const parts = [];
+          if (result.coins > 0) parts.push(`${result.coins} coins`);
+          if (result.xp > 0) parts.push(`${result.xp} XP`);
+          if (result.specialItem) parts.push(`special item: ${result.specialItem}`);
+          this.addNotification(
+            `Daily reward claimed (streak ${result.streak}): ${parts.join(', ')}`
+          );
+          this._updateDailyRewardUI();
+          this.hideDailyReward();
+        } else {
+          this.addNotification('Daily reward already claimed today.');
+        }
+      }
+    });
+    card.appendChild(claimBtn);
+
+    container.appendChild(card);
+    document.body.appendChild(container);
+    this.dailyRewardClaimBtn = claimBtn;
+    this._dailyRewardElements = { streakInfo, rewardInfo };
+  }
+
+  bindDailyReward(dailyRewardSys, progressionSys) {
+    this.dailyRewardSys = dailyRewardSys;
+    this.dailyRewardProgressionSys = progressionSys;
+    this._updateDailyRewardUI();
+  }
+
+  _updateDailyRewardUI() {
+    const sys = this.dailyRewardSys;
+    if (!sys || !this._dailyRewardElements) return;
+
+    const check = sys.checkDailyReward();
+    const { streakInfo, rewardInfo } = this._dailyRewardElements;
+    const btn = this.dailyRewardClaimBtn;
+
+    streakInfo.textContent = check.available
+      ? `Current streak: ${check.streak} day${check.streak !== 1 ? 's' : ''}`
+      : `Streak: ${check.streak} day${check.streak !== 1 ? 's' : ''} (claimed today)`;
+
+    if (check.available) {
+      const parts = [];
+      if (check.dayReward.coins > 0) parts.push(`${check.dayReward.coins} coins`);
+      if (check.dayReward.xp > 0) parts.push(`${check.dayReward.xp} XP`);
+      if (check.dayReward.specialItem) parts.push(`special item`);
+      rewardInfo.textContent = `Today (day ${check.potentialStreak}): ${parts.join(', ')}`;
+      btn.disabled = false;
+      btn.textContent = 'Claim Daily Reward';
+    } else {
+      rewardInfo.textContent = 'Come back tomorrow for the next daily reward.';
+      btn.disabled = true;
+      btn.textContent = 'Claimed today';
+    }
+  }
+
+  showDailyReward() {
+    if (!this.dailyRewardSys) return;
+    this.dailyRewardVisible = true;
+    this._updateDailyRewardUI();
+    const container = document.getElementById('daily-reward-ui');
+    if (container) container.style.display = '';
+  }
+
+  hideDailyReward() {
+    this.dailyRewardVisible = false;
+    const container = document.getElementById('daily-reward-ui');
+    if (container) container.style.display = 'none';
+  }
+
+  notifyDailyRewardAvailable() {
+    this.addNotification('Daily reward available!');
+  }
+
+  // ============================ Trade UI ============================
+
+  _setupTradeUI() {
+    const container = document.createElement('div');
+    container.id = 'trade-ui';
+    Object.assign(container.style, {
+      position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+      width: '620px', zIndex: '450', display: 'none', flexDirection: 'column',
+      gap: '12px', fontFamily: 'system-ui, sans-serif',
+    });
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: 'rgba(30,40,42,0.97)', border: '2px solid #d9936a',
+      borderRadius: '12px', padding: '20px', boxSizing: 'border-box',
+      backdropFilter: 'blur(10px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      marginBottom: '16px',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'TRADE';
+    Object.assign(title.style, {
+      fontSize: '16px', fontWeight: '700', color: '#fcd436', letterSpacing: '0.05em',
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    Object.assign(closeBtn.style, {
+      background: 'transparent', border: 'none', color: '#9ab0b4',
+      fontSize: '18px', cursor: 'pointer', lineHeight: '1',
+    });
+    closeBtn.addEventListener('click', () => this.hideTrade());
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    const panels = document.createElement('div');
+    Object.assign(panels.style, { display: 'flex', gap: '20px' });
+
+    const localPanel = this._buildTradeSide('your items', 'offer');
+    const remotePanel = this._buildTradeSide("their items", 'request');
+    panels.appendChild(localPanel);
+    panels.appendChild(remotePanel);
+    card.appendChild(panels);
+
+    const footer = document.createElement('div');
+    Object.assign(footer.style, {
+      display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px',
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    Object.assign(cancelBtn.style, {
+      padding: '8px 16px', borderRadius: '6px', border: '1px solid rgba(217,147,106,0.3)',
+      background: 'rgba(60,72,74,0.6)', color: '#c8d4d8', fontSize: '0.9rem',
+      cursor: 'pointer', outline: 'none',
+    });
+    cancelBtn.addEventListener('click', () => {
+      this.hideTrade();
+      if (this.onTradeCancel) this.onTradeCancel();
+    });
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.id = 'trade-confirm-btn';
+    confirmBtn.textContent = 'Confirm Trade';
+    Object.assign(confirmBtn.style, {
+      padding: '8px 20px', borderRadius: '6px', border: 'none',
+      background: '#d9936a', color: '#1e282a', fontSize: '0.9rem',
+      fontWeight: '700', cursor: 'pointer', outline: 'none', opacity: '0.5',
+    });
+    confirmBtn.disabled = true;
+    confirmBtn.addEventListener('click', () => {
+      if (this.onTradeConfirm) {
+        this.onTradeConfirm(this._tradePeerId, this._tradeSelected.offer, this._tradeSelected.request);
+      }
+    });
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    card.appendChild(footer);
+
+    container.appendChild(card);
+    document.body.appendChild(container);
+    this.tradeContainer = container;
+    this._tradeElements = { localList: localPanel.querySelector('.trade-side-list'),
+      remoteList: remotePanel.querySelector('.trade-side-list'), confirmBtn };
+    this._tradePeerId = null;
+    this._tradeSelected = { offer: new Set(), request: new Set() };
+  }
+
+  _buildTradeSide(label, side) {
+    const wrapper = document.createElement('div');
+    Object.assign(wrapper.style, { display: 'flex', flexDirection: 'column', gap: '8px', flex: '1' });
+
+    const title = document.createElement('div');
+    title.textContent = label;
+    Object.assign(title.style, { fontSize: '13px', fontWeight: '600', color: '#c8d4d8', textTransform: 'uppercase', letterSpacing: '0.05em' });
+
+    const list = document.createElement('div');
+    list.className = 'trade-side-list';
+    Object.assign(list.style, {
+      display: 'flex', flexDirection: 'column', gap: '6px',
+      maxHeight: '260px', overflowY: 'auto',
+      background: 'rgba(60,72,74,0.4)', borderRadius: '8px', padding: '10px',
+    });
+
+    const empty = document.createElement('div');
+    empty.textContent = '(none)';
+    Object.assign(empty.style, { color: '#666', fontSize: '12px', fontStyle: 'italic', padding: '4px 0' });
+    list.appendChild(empty);
+    list._emptyEl = empty;
+
+    wrapper.appendChild(title);
+    wrapper.appendChild(list);
+    return wrapper;
+  }
+
+  showTrade(peerId, peerName, localItemIds, remoteItemIds) {
+    if (!this.tradeContainer) return;
+    this._tradePeerId = peerId;
+    this._tradeSelected = { offer: new Set(), request: new Set() };
+    this.tradeContainer.style.display = 'flex';
+    this._renderTradeSide(localItemIds, 'offer');
+    this._renderTradeSide(remoteItemIds, 'request');
+    this._updateTradeConfirm();
+    this.addNotification(`Trade opened with ${peerName}. Select items to swap.`);
+  }
+
+  hideTrade() {
+    if (!this.tradeContainer) return;
+    this.tradeContainer.style.display = 'none';
+    this._tradePeerId = null;
+    this._tradeSelected = { offer: new Set(), request: new Set() };
+  }
+
+  _renderTradeSide(itemIds, side) {
+    const list = side === 'offer' ? this._tradeElements.localList : this._tradeElements.remoteList;
+    if (!list) return;
+    list.innerHTML = '';
+    if (itemIds.length === 0) {
+      list.appendChild(list._emptyEl || (() => { const e = document.createElement('div'); e.textContent = '(none)'; Object.assign(e.style, { color: '#666', fontSize: '12px', fontStyle: 'italic', padding: '4px 0' }); return e; })());
+      return;
+    }
+    const selected = side === 'offer' ? this._tradeSelected.offer : this._tradeSelected.request;
+    itemIds.forEach(itemId => {
+      const row = document.createElement('div');
+      const isSelected = selected.has(itemId);
+      Object.assign(row.style, {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        padding: '6px 8px', borderRadius: '6px',
+        background: isSelected ? '#d9936a' : 'rgba(217,147,106,0.15)',
+        border: isSelected ? '1px solid #d9936a' : '1px solid rgba(217,147,106,0.3)',
+        cursor: 'pointer', fontSize: '12px', color: isSelected ? '#1e282a' : '#e8dccc',
+      });
+      row.textContent = itemId.split('/').pop().replace(/\.(drc|glb|obj)$/i, '');
+      row.title = itemId;
+      row.addEventListener('click', () => {
+        if (isSelected) selected.delete(itemId); else selected.add(itemId);
+        this._renderTradeSide(itemIds, side);
+        this._updateTradeConfirm();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  _updateTradeConfirm() {
+    const btn = this._tradeElements.confirmBtn;
+    if (!btn) return;
+    const hasOffer = this._tradeSelected.offer.size > 0;
+    const hasRequest = this._tradeSelected.request.size > 0;
+    btn.disabled = !(hasOffer && hasRequest);
+    btn.style.opacity = btn.disabled ? '0.5' : '1';
+  }
+
 }
