@@ -50,6 +50,9 @@ let questSys = null;
 let fallbackTimer = null;
 let progressionSys = null;
 
+// State for the active trade flow (who we're trading with and what we selected).
+let tradeState = null; // { peerId, peerName, role: 'initiator' | 'receiver', localItems, remoteItems }
+
 // Game flow state: 'loading' | 'title' | 'intro' | 'tutorial' | 'playing'
 let gameState = 'loading';
 
@@ -216,6 +219,8 @@ async function initCore() {
   // Multiplayer system — connects to the WebSocket relay for cross-player presence.
   multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
 
+  deliveryItemSys.setMultiplayer(multiplayer);
+
   // Apply restored last-known position/rotation to the local avatar on rejoin.
   multiplayer.onRestoredPosition = ({ p, r }) => {
     if (!playerAvatar) return;
@@ -338,6 +343,49 @@ async function initCore() {
     ui.addChatMessage('You', text, 'local');
     if (multiplayer?.connected) {
       multiplayer.sendChat(text);
+    }
+  };
+
+  ui.onTradeConfirm = (peerId, offerItemIds, requestItemIds) => {
+    if (!tradeState) return;
+    if (tradeState.role === 'initiator') {
+      multiplayer.sendTrade(tradeState.peerId, 'offer', { offer: offerItemIds, request: requestItemIds });
+      ui.addNotification('Trade offer sent.');
+    } else {
+      _executeTrade(tradeState.peerId, Array.from(offerItemIds), Array.from(requestItemIds));
+      multiplayer.sendTrade(tradeState.peerId, 'accept', { offer: offerItemIds, request: requestItemIds });
+      ui.addNotification('Trade accepted.');
+    }
+    ui.hideTrade();
+    tradeState = null;
+  };
+
+  ui.onTradeCancel = () => {
+    if (tradeState && tradeState.role === 'receiver') {
+      multiplayer.sendTrade(tradeState.peerId, 'reject', {});
+    }
+    ui.hideTrade();
+    tradeState = null;
+  };
+
+  multiplayer.onTradeMessage = (fromPeerId, tradeType, payload) => {
+    const avatar = multiplayer.players.get(fromPeerId);
+    const peerName = avatar ? avatar.displayName : 'Player';
+    if (tradeType === 'offer') {
+      ui.addNotification(`${peerName} wants to trade with you.`);
+      const localItemIds = deliveryItemSys ? deliveryItemSys.carriedKeys() : [];
+      const remoteOfferItems = payload.offer || [];
+      ui.showTrade(fromPeerId, peerName, localItemIds, remoteOfferItems);
+      tradeState = { peerId: fromPeerId, peerName, role: 'receiver', localItems: localItemIds, remoteItems: remoteOfferItems };
+    } else if (tradeType === 'accept') {
+      ui.addNotification(`${peerName} accepted the trade.`);
+      _executeTrade(fromPeerId, payload.offer || [], payload.request || []);
+      ui.hideTrade();
+      tradeState = null;
+    } else if (tradeType === 'reject') {
+      ui.addNotification(`${peerName} rejected the trade.`);
+      ui.hideTrade();
+      tradeState = null;
     }
   };
 
@@ -697,8 +745,27 @@ async function _createPlanetGuardianNPC(animSys, animData, meshLoader) {
 }
 
 function _tryInteract() {
-  if (!playerAvatar || !npcSys || dialogueSys.active) return;
+  if (!playerAvatar || dialogueSys.active) return;
   const playerPos = playerAvatar.group.position;
+
+  // Check for a remote player within trade range first (7 units).
+  if (multiplayer && multiplayer.connected) {
+    let nearestPlayer = null;
+    let nearestPlayerDist = 7;
+    for (const [peerId, avatar] of multiplayer.players) {
+      const d = avatar.group.position.distanceTo(playerPos);
+      if (d < nearestPlayerDist) {
+        nearestPlayerDist = d;
+        nearestPlayer = { id: peerId, avatar, dist: d };
+      }
+    }
+    if (nearestPlayer) {
+      _openTrade(nearestPlayer.id, nearestPlayer.avatar);
+      return;
+    }
+  }
+
+  if (!npcSys) return;
   let nearest = null;
   let nearestDist = 7; // Must walk up to NPC to interact
   for (const npc of npcSys.npcs) {
@@ -743,6 +810,43 @@ function srAnnounce(text, politeness = 'polite') {
     el.setAttribute('aria-live', politeness);
     el.textContent = '';
     requestAnimationFrame(() => { el.textContent = text; });
+  }
+}
+
+}
+
+/**
+ * Open the trade UI with a remote player. Fetches both players' carried item
+ * modelIds and shows the trade panel.
+ */
+function _openTrade(peerId, avatar) {
+  if (!deliveryItemSys || !multiplayer || !ui) return;
+  const localItemIds = deliveryItemSys.carriedKeys();
+  const remoteItemIds = multiplayer.getRemoteCarriedItems(peerId);
+  ui.showTrade(peerId, avatar.displayName || 'Player', localItemIds, remoteItemIds);
+  tradeState = { peerId, peerName: avatar.displayName || 'Player', role: 'initiator', localItems: localItemIds, remoteItems: remoteItemIds };
+}
+
+/**
+ * Execute a trade between the local player and a remote peer.
+ * offerItemIds: items the local player gives away
+ * requestItemIds: items the local player receives
+ */
+function _executeTrade(peerId, offerItemIds, requestItemIds) {
+  if (!deliveryItemSys || !multiplayer) return;
+  // Local player gives offered items.
+  for (const id of offerItemIds) {
+    if (deliveryItemSys.carriedKeys().includes(id)) {
+      deliveryItemSys.deliverItem(id);
+    }
+  }
+  // Local player receives requested items.
+  for (const id of requestItemIds) {
+    deliveryItemSys.receiveItem(id, null, null);
+  }
+  // Broadcast updated carried-items list.
+  if (multiplayer.connected) {
+    multiplayer.setCarriedItems(deliveryItemSys.carriedKeys());
   }
 }
 
