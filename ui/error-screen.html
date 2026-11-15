@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error Screen - Planetwood</title>
+  <style>
+    #error-screen-backdrop {
+      position: fixed;
+      inset: 0;
+      background: #283436;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow-y: auto;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    #error-screen-backdrop.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #error-screen-backdrop { transition: none; }
+    }
+
+    #error-screen-content {
+      background: rgba(40, 52, 54, 0.95);
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+    }
+    #error-screen-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      line-height: 1;
+    }
+    #error-screen-title {
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      letter-spacing: -0.5px;
+    }
+    #error-screen-message {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 0 0 20px 0;
+      max-width: 100%;
+      word-wrap: break-word;
+      text-align: left;
+    }
+    #error-screen-countdown {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 14px;
+      margin: 0 0 24px 0;
+      min-height: 18px;
+    }
+    #error-screen-reconnect {
+      background: #4e8c6d;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      min-width: 120px;
+    }
+    #error-screen-reconnect:hover { background: #5da37d; }
+    #error-screen-reconnect:focus-visible {
+      outline: 2px solid #5da37d;
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #error-screen-reconnect { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="error-screen-backdrop" role="presentation" aria-hidden="true">
+    <div id="error-screen-content" role="alertdialog" aria-modal="true">
+      <div id="error-screen-icon" aria-hidden="true">⚠️</div>
+      <h2 id="error-screen-title"></h2>
+      <p id="error-screen-message"></p>
+      <div id="error-screen-countdown"></div>
+      <button id="error-screen-reconnect">Reconnect</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const backdrop = document.getElementById('error-screen-backdrop');
+      const content = document.getElementById('error-screen-content');
+      const iconEl = document.getElementById('error-screen-icon');
+      const titleEl = document.getElementById('error-screen-title');
+      const messageEl = document.getElementById('error-screen-message');
+      const countdownEl = document.getElementById('error-screen-countdown');
+      const reconnectBtn = document.getElementById('error-screen-reconnect');
+
+      let isVisible = false;
+      let countdownTimer = null;
+      let countdownValue = 0;
+      let lastFocusedElement = null;
+      let focusTrapHandler = null;
+
+      const typeConfig = {
+        disconnect: {
+          title: 'Connection Lost',
+          message: 'You have been disconnected from the server.',
+          icon: '⚠️',
+          defaultCountdown: 10
+        },
+        timeout: {
+          title: 'Connection Timed Out',
+          message: 'The server took too long to respond.',
+          icon: '⏰',
+          defaultCountdown: 10
+        },
+        error: {
+          title: 'Something Went Wrong',
+          message: '',
+          icon: '❌',
+          defaultCountdown: 0
+        },
+        kicked: {
+          title: 'Kicked',
+          message: '',
+          icon: '🚫',
+          defaultCountdown: 0
+        }
+      };
+
+      function updateCountdownDisplay() {
+        countdownEl.textContent = countdownValue > 0
+          ? `Auto-reconnecting in ${countdownValue}...`
+          : '';
+      }
+
+      function stopCountdown() {
+        if (countdownTimer) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+        }
+      }
+
+      function startCountdown() {
+        stopCountdown();
+        countdownTimer = setInterval(() => {
+          countdownValue--;
+          if (countdownValue <= 0) {
+            countdownValue = 0;
+            updateCountdownDisplay();
+            stopCountdown();
+            triggerReconnect();
+          } else {
+            updateCountdownDisplay();
+          }
+        }, 1000);
+      }
+
+      function triggerReconnect() {
+        hide();
+        document.dispatchEvent(new CustomEvent('error:reconnect'));
+      }
+
+      function trapFocus() {
+        focusTrapHandler = (e) => {
+          if (e.key === 'Tab') {
+            const focusable = content.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+              e.preventDefault();
+              last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault();
+              first.focus();
+            }
+          }
+          if (e.key === 'Escape') e.preventDefault();
+        };
+        document.addEventListener('keydown', focusTrapHandler);
+      }
+
+      function untrapFocus() {
+        if (focusTrapHandler) {
+          document.removeEventListener('keydown', focusTrapHandler);
+          focusTrapHandler = null;
+        }
+      }
+
+      function show(options = {}) {
+        const { type = 'disconnect', message, countdown } = options;
+        const config = typeConfig[type] || typeConfig.disconnect;
+
+        iconEl.textContent = config.icon;
+        titleEl.textContent = config.title;
+        messageEl.textContent = (message !== undefined && message !== null && message !== '')
+          ? message : config.message;
+
+        countdownValue = countdown !== undefined && countdown !== null ? countdown : config.defaultCountdown;
+        updateCountdownDisplay();
+
+        backdrop.classList.add('visible');
+        isVisible = true;
+
+        lastFocusedElement = document.activeElement;
+        reconnectBtn.focus();
+        trapFocus();
+
+        if (countdownValue > 0) startCountdown();
+      }
+
+      function hide() {
+        if (!isVisible) return;
+        isVisible = false;
+        backdrop.classList.remove('visible');
+        stopCountdown();
+        untrapFocus();
+
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        }
+
+        document.dispatchEvent(new CustomEvent('error:dismiss'));
+      }
+
+      function updateCountdown(n) {
+        if (!isVisible) return;
+        countdownValue = n;
+        updateCountdownDisplay();
+        stopCountdown();
+        if (countdownValue <= 0) {
+          triggerReconnect();
+        } else {
+          startCountdown();
+        }
+      }
+
+      reconnectBtn.addEventListener('click', triggerReconnect);
+
+      window.ErrorScreen = {
+        show,
+        hide,
+        updateCountdown,
+        get isOpen() { return isVisible; }
+      };
+    })();
+  </script>
+</body>
+</html>

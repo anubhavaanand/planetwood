@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planetwood Animation Specs</title>
+    <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: #283436;
+      --surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background-color: var(--bg);
+            color: var(--fg);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        h1, h2, h3 {
+            font-family: var(--font-display);
+            color: var(--accent);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 30px;
+            background: var(--surface);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+
+        .filter-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            border-radius: 4px;
+        }
+
+        .clips-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .clip-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .clip-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .clip-header {
+            background: var(--accent);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .clip-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .clip-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .clip-content {
+            padding: 20px;
+        }
+
+        .skeleton-preview {
+            width: 100%;
+            height: 150px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skeleton-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .timeline-ruler {
+            height: 30px;
+            margin-bottom: 15px;
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 2px;
+            background: var(--accent);
+        }
+
+        .timeline-label {
+            position: absolute;
+            top: -20px;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .attr-info {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+        }
+        .attr-row {
+            display: flex;
+            flex-direction: column;
+            min-width: 80px;
+        }
+        .attr-label {
+            font-size: 0.7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .attr-value {
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            color: var(--accent);
+        }
+        .easing-sparklines {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .sparkline {
+            flex: 1;
+            height: 40px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .sparkline-label {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .sparkline-path {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+        }
+
+        .bone-hierarchy {
+            margin-bottom: 15px;
+        }
+
+        .bone-hierarchy h4 {
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .bone-tree {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: var(--fg);
+            line-height: 1.4;
+        }
+
+        .code-snippet {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .keyframe-thumbnails {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .thumbnail {
+            width: 50px;
+            height: 50px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .thumbnail.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .clip-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: var(--muted);
+            padding: 0 15px 15px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .filters {
+                flex-direction: column;
+            }
+
+            .filter-group {
+                width: 100%;
+            }
+
+            .clips-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        [aria-live] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+    </style>
+</head>
+<body>
+    <div aria-live="polite" aria-atomic="true" id="sr-status"></div>
+    
+    <div class="container">
+        <h1>Planetwood Animation Specifications</h1>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="total-clips">36</div>
+                <div class="stat-label">Animation Clips</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-skeletons">21</div>
+                <div class="stat-label">Unique Skeletons</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-frames">1245</div>
+                <div class="stat-label">Total Frames</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avg-duration">1.2s</div>
+                <div class="stat-label">Avg Duration</div>
+            </div>
+        </div>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label for="skeleton-filter">Skeleton Type:</label>
+                <select id="skeleton-filter">
+                    <option value="all">All Skeletons</option>
+                    <option value="avatar">Avatar</option>
+                    <option value="npc">NPC</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="duration-filter">Duration:</label>
+                <select id="duration-filter">
+                    <option value="all">All Durations</option>
+                    <option value="short">Short (<1s)</option>
+                    <option value="medium">Medium (1-2s)</option>
+                    <option value="long">Long (>2s)</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="search-filter">Search:</label>
+                <input type="text" id="search-filter" placeholder="Search animation names...">
+            </div>
+        </div>
+        
+        <div class="clips-grid" id="clips-container">
+            <!-- Clip cards will be inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Animation data embedded as JSON
+        const animationData = {
+            "skeletons": [
+    {
+        "id": "avatar",
+        "name": "Avatar Skeleton",
+        "type": "humanoid",
+        "boneCount": 22,
+        "bones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21"
+        ],
+        "hierarchy": {
+            "0": [
+                "1",
+                "14",
+                "18"
+            ],
+            "1": [
+                "2"
+            ],
+            "2": [
+                "3"
+            ],
+            "3": [
+                "4",
+                "6",
+                "10"
+            ],
+            "4": [
+                "5"
+            ],
+            "6": [
+                "7"
+            ],
+            "7": [
+                "8"
+            ],
+            "8": [
+                "9"
+            ],
+            "10": [
+                "11"
+            ],
+            "11": [
+                "12"
+            ],
+            "12": [
+                "13"
+            ],
+            "14": [
+                "15"
+            ],
+            "15": [
+                "16"
+            ],
+            "16": [
+                "17"
+            ],
+            "18": [
+                "19"
+            ],
+            "19": [
+                "20"
+            ],
+            "20": [
+                "21"
+            ]
+        }
+    },
+    {
+        "id": "present",
+        "name": "NPC Skeleton",
+        "type": "npc",
+        "boneCount": 28,
+        "bones": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27"
+        ],
+        "hierarchy": {
+            "0": [
+                "1",
+                "14",
+                "18"
+            ],
+            "1": [
+                "2"
+            ],
+            "2": [
+                "3"
+            ],
+            "3": [
+                "4",
+                "6",
+                "10"
+            ],
+            "4": [
+                "5"
+            ],
+            "6": [
+                "7"
+            ],
+            "7": [
+                "8"
+            ],
+            "8": [
+                "9"
+            ],
+            "10": [
+                "11"
+            ],
+            "11": [
+                "12"
+            ],
+            "12": [
+                "13"
+            ],
+            "14": [
+                "15"
+            ],
+            "15": [
+                "16"
+            ],
+            "16": [
+                "17"
+            ],
+            "18": [
+                "19"
+            ],
+            "19": [
+                "20"
+            ],
+            "20": [
+                "21"
+            ]
+        }
+    }
+],
+            "animations": [
+    {
+        "id": "avatar_avatar-afk1",
+        "name": "Avatar Afk1",
+        "skeletonId": "avatar",
+        "duration": 18.5,
+        "fps": 24,
+        "frames": 444,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-afk2",
+        "name": "Avatar Afk2",
+        "skeletonId": "avatar",
+        "duration": 7.5,
+        "fps": 24,
+        "frames": 180,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-afk3",
+        "name": "Avatar Afk3",
+        "skeletonId": "avatar",
+        "duration": 5.83,
+        "fps": 24,
+        "frames": 140,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-air",
+        "name": "Avatar Air",
+        "skeletonId": "avatar",
+        "duration": 1.67,
+        "fps": 24,
+        "frames": 40,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "airborne"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-idle",
+        "name": "Avatar Idle",
+        "skeletonId": "avatar",
+        "duration": 3.75,
+        "fps": 24,
+        "frames": 90,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-run",
+        "name": "Avatar Run",
+        "skeletonId": "avatar",
+        "duration": 0.96,
+        "fps": 24,
+        "frames": 23,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "locomotion"
+        ],
+        "loop": true
+    },
+    {
+        "id": "avatar_avatar-sprint",
+        "name": "Avatar Sprint",
+        "skeletonId": "avatar",
+        "duration": 0.96,
+        "fps": 24,
+        "frames": 23,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "avatar",
+            "locomotion"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_alien_alien-idle",
+        "name": "Alien Idle",
+        "skeletonId": "npc",
+        "duration": 13.33,
+        "fps": 24,
+        "frames": 320,
+        "boneCount": 28,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_boss_boss-idle",
+        "name": "Boss Idle",
+        "skeletonId": "npc",
+        "duration": 3.62,
+        "fps": 24,
+        "frames": 87,
+        "boneCount": 32,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_caveman_caveman-idle",
+        "name": "Caveman Idle",
+        "skeletonId": "npc",
+        "duration": 8.54,
+        "fps": 24,
+        "frames": 205,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_chef_chef-idle",
+        "name": "Chef Idle",
+        "skeletonId": "npc",
+        "duration": 11.21,
+        "fps": 24,
+        "frames": 269,
+        "boneCount": 28,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_diver_diver-idle",
+        "name": "Diver Idle",
+        "skeletonId": "npc",
+        "duration": 5.21,
+        "fps": 24,
+        "frames": 125,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_diver_diver-talk",
+        "name": "Diver Talk",
+        "skeletonId": "npc",
+        "duration": 3.75,
+        "fps": 24,
+        "frames": 90,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_diver_diver-talk-idle",
+        "name": "Diver Talk Idle",
+        "skeletonId": "npc",
+        "duration": 5.42,
+        "fps": 24,
+        "frames": 130,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_factory-worker-a_factory-worker-a-idle",
+        "name": "Factory Worker A Idle",
+        "skeletonId": "npc",
+        "duration": 8.54,
+        "fps": 24,
+        "frames": 205,
+        "boneCount": 28,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_factory-worker-b_factory-worker-b-talk",
+        "name": "Factory Worker B Talk",
+        "skeletonId": "npc",
+        "duration": 2.54,
+        "fps": 24,
+        "frames": 61,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_factory-worker-b_factory-worker-b-walk",
+        "name": "Factory Worker B Walk",
+        "skeletonId": "npc",
+        "duration": 1.54,
+        "fps": 24,
+        "frames": 37,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "locomotion"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_factory-worker-c_factory-worker-c-idle",
+        "name": "Factory Worker C Idle",
+        "skeletonId": "npc",
+        "duration": 5.83,
+        "fps": 24,
+        "frames": 140,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_female-scientist_female-scientist-idle",
+        "name": "Female Scientist Idle",
+        "skeletonId": "npc",
+        "duration": 5.33,
+        "fps": 24,
+        "frames": 128,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_fox_fox-idle",
+        "name": "Fox Idle",
+        "skeletonId": "npc",
+        "duration": 5.0,
+        "fps": 24,
+        "frames": 120,
+        "boneCount": 18,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_male-scientist_male-scientist-idle",
+        "name": "Male Scientist Idle",
+        "skeletonId": "npc",
+        "duration": 9.12,
+        "fps": 24,
+        "frames": 219,
+        "boneCount": 27,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_mountainman_mountainman-idle",
+        "name": "Mountainman Idle",
+        "skeletonId": "npc",
+        "duration": 4.17,
+        "fps": 24,
+        "frames": 100,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_musician_musician-idle",
+        "name": "Musician Idle",
+        "skeletonId": "npc",
+        "duration": 4.54,
+        "fps": 24,
+        "frames": 109,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_musician_musician-talk",
+        "name": "Musician Talk",
+        "skeletonId": "npc",
+        "duration": 2.88,
+        "fps": 24,
+        "frames": 69,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_office-worker_office-worker-idle",
+        "name": "Office Worker Idle",
+        "skeletonId": "npc",
+        "duration": 15.79,
+        "fps": 24,
+        "frames": 379,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_office-worker_office-worker-idle-talk",
+        "name": "Office Worker Idle Talk",
+        "skeletonId": "npc",
+        "duration": 4.96,
+        "fps": 24,
+        "frames": 119,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_office-worker_office-worker-talk",
+        "name": "Office Worker Talk",
+        "skeletonId": "npc",
+        "duration": 2.54,
+        "fps": 24,
+        "frames": 61,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_office-worker_office-worker-walk",
+        "name": "Office Worker Walk",
+        "skeletonId": "npc",
+        "duration": 1.5,
+        "fps": 24,
+        "frames": 36,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "locomotion"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_office-worker_office-worker-walk-alt",
+        "name": "Office Worker Walk Alt",
+        "skeletonId": "npc",
+        "duration": 1.54,
+        "fps": 24,
+        "frames": 37,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "locomotion"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_oldwoman_oldwoman-idle",
+        "name": "Oldwoman Idle",
+        "skeletonId": "npc",
+        "duration": 3.33,
+        "fps": 24,
+        "frames": 80,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_owl_owl-idle",
+        "name": "Owl Idle",
+        "skeletonId": "npc",
+        "duration": 5.0,
+        "fps": 24,
+        "frames": 120,
+        "boneCount": 9,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_scout_scout-idle",
+        "name": "Scout Idle",
+        "skeletonId": "npc",
+        "duration": 6.42,
+        "fps": 24,
+        "frames": 154,
+        "boneCount": 28,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_threekid_threekid-idle",
+        "name": "Threekid Idle",
+        "skeletonId": "npc",
+        "duration": 2.79,
+        "fps": 24,
+        "frames": 67,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_young-lady_young-lady-idle",
+        "name": "Young Lady Idle",
+        "skeletonId": "npc",
+        "duration": 5.75,
+        "fps": 24,
+        "frames": 138,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_young-lady_young-lady-talk",
+        "name": "Young Lady Talk",
+        "skeletonId": "npc",
+        "duration": 2.92,
+        "fps": 24,
+        "frames": 70,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc"
+        ],
+        "loop": true
+    },
+    {
+        "id": "npcs_present_young-lady_young-lady-talk-idle",
+        "name": "Young Lady Talk Idle",
+        "skeletonId": "npc",
+        "duration": 3.33,
+        "fps": 24,
+        "frames": 80,
+        "boneCount": 22,
+        "attributes": [
+            "position",
+            "quaternion",
+            "scale"
+        ],
+        "tags": [
+            "npc",
+            "idle"
+        ],
+        "loop": true
+    }
+]
+        };
+
+        // Utility functions
+        const formatTime = (seconds) => {
+            const minutes = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+        };
+
+        const getEasingFunction = (type) => {
+            const easings = {
+                linear: t => t,
+                easeInQuad: t => t * t,
+                easeOutQuad: t => t * (2 - t),
+                easeInOutQuad: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+                easeInCubic: t => t * t * t,
+                easeOutCubic: t => --t * t * t + 1,
+                easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+                easeInSine: t => 1 - Math.cos(t * Math.PI / 2),
+                easeOutSine: t => Math.sin(t * Math.PI / 2),
+                easeInOutSine: t => -(Math.cos(Math.PI * t) - 1) / 2,
+                easeInExpo: t => t === 0 ? 0 : Math.pow(2, 10 * t - 10),
+                easeOutExpo: t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+                easeInOutExpo: t => t === 0 ? 0 : t === 1 ? 1 : t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2,
+                easeInBack: t => t * t * (2.70158 * t - 1.70158),
+                easeOutBack: t => --t * t * (2.70158 * t + 1.70158) + 1,
+                easeInOutBack: t => t < 0.5 ? (t * t * ((2.598675 * 2) * t - 2.598675 * 2)) / 2 : ((t - 1) * (t - 1) * ((2.598675 * 2) * (t - 1) + 2.598675 * 2) + 2) / 2,
+                easeOutBounce: t => {
+                    const n1 = 7.5625;
+                    const d1 = 2.75;
+                    if (t < 1 / d1) return n1 * t * t;
+                    else if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+                    else if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+                    else return n1 * (t -= 2.625 / d1) * t + 0.984375;
+                }
+            };
+            return easings[type] || easings.linear;
+        };
+
+        // Generate skeleton SVG
+        const generateSkeletonSVG = (skeleton, frame = 0, animation = null) => {
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "100%");
+            svg.setAttribute("viewBox", "0 0 100 200");
+            
+            // Simple stick figure representation
+            const groups = {};
+            skeleton.bones.forEach(bone => {
+                const g = document.createElementNS(svgNS, "g");
+                g.setAttribute("id", `bone-${bone}`);
+                svg.appendChild(g);
+                groups[bone] = g;
+            });
+            
+            // Draw connections (simplified)
+            Object.keys(skeleton.hierarchy).forEach(parent => {
+                skeleton.hierarchy[parent].forEach(child => {
+                    const line = document.createElementNS(svgNS, "line");
+                    line.setAttribute("x1", "50");
+                    line.setAttribute("y1", parent === "head" ? 30 : 50 + Object.keys(skeleton.hierarchy).indexOf(parent) * 15);
+                    line.setAttribute("x2", "50");
+                    line.setAttribute("y2", child === "head" ? 30 : 50 + Object.keys(skeleton.hierarchy).indexOf(child) * 15);
+                    line.setAttribute("stroke", "#4e8c6d");
+                    line.setAttribute("stroke-width", "3");
+                    line.setAttribute("stroke-linecap", "round");
+                    groups[parent].appendChild(line);
+                });
+            });
+            
+            // Draw joints
+            skeleton.bones.forEach(bone => {
+                const circle = document.createElementNS(svgNS, "circle");
+                circle.setAttribute("cx", "50");
+                circle.setAttribute("cy", bone === "head" ? 30 : 50 + skeleton.bones.indexOf(bone) * 15);
+                circle.setAttribute("r", "4");
+                circle.setAttribute("fill", "#e0e0e0");
+                groups[bone].appendChild(circle);
+            });
+            
+            return svg.outerHTML;
+        };
+
+        // DOM elements
+        const clipsContainer = document.getElementById('clips-container');
+        const skeletonFilter = document.getElementById('skeleton-filter');
+        const durationFilter = document.getElementById('duration-filter');
+        const searchFilter = document.getElementById('search-filter');
+        const srStatus = document.getElementById('sr-status');
+        
+        // State
+        let filteredAnimations = [...animationData.animations];
+        
+        // Initialize
+        function init() {
+            // Add main content ID for skip link
+            const container = document.querySelector('.container');
+            if (container) container.id = 'main-content';
+            renderClips();
+            setupFilters();
+            updateStats();
+        }
+        
+        function updateStats() {
+            document.getElementById('total-clips').textContent = filteredAnimations.length;
+            const uniqueSkeletons = new Set(filteredAnimations.map(a => a.skeletonId));
+            document.getElementById('total-skeletons').textContent = uniqueSkeletons.size;
+            const totalFrames = filteredAnimations.reduce((sum, a) => sum + a.frames, 0);
+            document.getElementById('total-frames').textContent = totalFrames;
+            const avgDuration = filteredAnimations.reduce((sum, a) => sum + a.duration, 0) / filteredAnimations.length;
+            document.getElementById('avg-duration').textContent = avgDuration.toFixed(1) + 's';
+        }
+        
+        function setupFilters() {
+            skeletonFilter.addEventListener('change', applyFilters);
+            durationFilter.addEventListener('change', applyFilters);
+            searchFilter.addEventListener('input', (e) => {
+                // Debounce search
+                clearTimeout(searchFilter.timeout);
+                searchFilter.timeout = setTimeout(applyFilters, 300);
+            });
+        }
+        
+        function applyFilters() {
+            const skeletonValue = skeletonFilter.value;
+            const durationValue = durationFilter.value;
+            const searchValue = searchFilter.value.toLowerCase();
+            
+            filteredAnimations = animationData.animations.filter(animation => {
+                // Skeleton filter
+                if (skeletonValue !== 'all' && 
+                    animation.skeletonId !== skeletonValue) {
+                    return false;
+                }
+                
+                // Duration filter
+                if (durationValue !== 'all') {
+                    if (durationValue === 'short' && animation.duration >= 1) return false;
+                    if (durationValue === 'medium' && (animation.duration < 1 || animation.duration > 2)) return false;
+                    if (durationValue === 'long' && animation.duration <= 2) return false;
+                }
+                
+                // Search filter
+                if (searchValue && 
+                    !animation.name.toLowerCase().includes(searchValue) && 
+                    !animation.description.toLowerCase().includes(searchValue)) {
+                    return false;
+                }
+                
+                return true;
+            });
+            
+            renderClips();
+            updateStats();
+            announceUpdate();
+        }
+        
+        function announceUpdate() {
+            srStatus.textContent = `Updated animation list. Showing ${filteredAnimations.length} animations.`;
+        }
+        
+        function renderClips() {
+            clipsContainer.innerHTML = '';
+            
+            if (filteredAnimations.length === 0) {
+                clipsContainer.innerHTML = '<p class="no-results">No animations match the current filters.</p>';
+                return;
+            }
+            
+            filteredAnimations.forEach(animation => {
+                const skeleton = animationData.skeletons.find(s => s.id === animation.skeletonId);
+                const card = createClipCard(animation, skeleton);
+                clipsContainer.appendChild(card);
+            });
+        }
+        
+        function createClipCard(animation, skeleton) {
+            const card = document.createElement('div');
+            card.className = 'clip-card';
+            card.setAttribute('role', 'article');
+            card.setAttribute('aria-label', `Animation: ${animation.name}`);
+            
+            // Generate unique ID for this card's controls
+            const cardId = `clip-${animation.id}`;
+            
+            card.innerHTML = `
+                <div class="clip-header">
+                    <h3>${animation.name}</h3>
+                    <div class="clip-controls">
+                        <button class="control-btn play-btn" aria-label="Play preview" title="Play preview">
+                            ▶️
+                        </button>
+                        <button class="control-btn pause-btn" aria-label="Pause preview" title="Pause preview" disabled>
+                            ⏸️
+                        </button>
+                        <button class="control-btn reset-btn" aria-label="Reset preview" title="Reset preview">
+                            🔁
+                        </button>
+                    </div>
+                </div>
+                <div class="clip-content">
+                    <div class="skeleton-preview">
+                        <div class="skeleton-svg-container">
+                            <!-- SVG will be injected here -->
+                        </div>
+                    </div>
+                    <div class="timeline-ruler">
+                        <div class="timeline-marker" id="marker-${animation.id}"></div>
+                        <div class="timeline-label" id="time-label-${animation.id}">0.00s</div>
+                    </div>
+                    <div class="attr-info">
+                        <div class="attr-row">
+                            <span class="attr-label">Bones</span>
+                            <span class="attr-value">${animation.boneCount}</span>
+                        </div>
+                        <div class="attr-row">
+                            <span class="attr-label">Frames</span>
+                            <span class="attr-value">${animation.frames}</span>
+                        </div>
+                        <div class="attr-row">
+                            <span class="attr-label">FPS</span>
+                            <span class="attr-value">${animation.fps}</span>
+                        </div>
+                        <div class="attr-row">
+                            <span class="attr-label">Attributes</span>
+                            <span class="attr-value">${animation.attributes.join(', ')}</span>
+                        </div>
+                    </div>
+                    <div class="bone-hierarchy">
+                        <h4>Bone Hierarchy</h4>
+                        <div class="bone-tree" id="bone-tree-${animation.id}">
+                            <!-- Will be populated -->
+                        </div>
+                    </div>
+                    <div class="code-snippet" id="code-snippet-${animation.id}">
+                        <!-- Code snippet will be populated -->
+                    </div>
+                    <div class="keyframe-thumbnails" id="thumbnails-${animation.id}">
+                        <!-- Thumbnails will be populated -->
+                    </div>
+                </div>
+                <div class="clip-footer">
+                    <span>Duration: ${formatTime(animation.duration)}</span>
+                    <span>${animation.fps || '24'} FPS</span>
+                </div>
+            `;
+            
+            // Add interactive functionality
+            const playBtn = card.querySelector('.play-btn');
+            const pauseBtn = card.querySelector('.pause-btn');
+            const resetBtn = card.querySelector('.reset-btn');
+            const marker = card.querySelector(`.timeline-marker`);
+            const timeLabel = card.querySelector(`#time-label-${animation.id}`);
+            const skeletonContainer = card.querySelector('.skeleton-svg-container');
+            const boneTree = card.querySelector(`#bone-tree-${animation.id}`);
+            const codeSnippet = card.querySelector(`#code-snippet-${animation.id}`);
+            const thumbnailsContainer = card.querySelector(`#thumbnails-${animation.id}`);
+            
+            // Initialize skeleton SVG
+            const skeletonSVG = generateSkeletonSVG(skeleton);
+            skeletonContainer.innerHTML = skeletonSVG;
+            
+            // Populate bone hierarchy
+            boneTree.textContent = getBoneHierarchyText(skeleton);
+            
+            // Generate code snippet
+            codeSnippet.textContent = generateCodeSnippet(animation, skeleton);
+            
+            // Generate thumbnails
+            thumbnailsContainer.innerHTML = generateThumbnails(animation);
+            
+            // Animation playback state
+            let animationFrame = 0;
+            let animationPlaying = false;
+            let animationFrameId = null;
+            
+            // Play/pause functionality
+            playBtn.addEventListener('click', () => {
+                if (!animationPlaying) {
+                    animationPlaying = true;
+                    playBtn.disabled = true;
+                    pauseBtn.disabled = false;
+                    animateClip(animation, skeleton, marker, timeLabel, skeletonContainer);
+                    announcePlayback(animation.name, true);
+                }
+            });
+            
+            pauseBtn.addEventListener('click', () => {
+                if (animationPlaying) {
+                    animationPlaying = false;
+                    playBtn.disabled = false;
+                    pauseBtn.disabled = true;
+                    cancelAnimationFrame(animationFrameId);
+                    announcePlayback(animation.name, false);
+                }
+            });
+            
+            resetBtn.addEventListener('click', () => {
+                animationPlaying = false;
+                playBtn.disabled = false;
+                pauseBtn.disabled = true;
+                cancelAnimationFrame(animationFrameId);
+                animationFrame = 0;
+                updateMarkerPosition(marker, timeLabel, animation, 0);
+                resetSkeletonPose(skeletonContainer, skeleton);
+                announceReset(animation.name);
+            });
+            
+            return card;
+        }
+        
+        function getBoneHierarchyText(skeleton) {
+            const lines = [];
+            const visited = new Set();
+            
+            function traverse(bone, depth = 0) {
+                if (visited.has(bone)) return;
+                visited.add(bone);
+                const indent = '  '.repeat(depth);
+                lines.push(`${indent}${bone}`);
+                
+                if (skeleton.hierarchy[bone]) {
+                    skeleton.hierarchy[bone].forEach(child => traverse(child, depth + 1));
+                }
+            }
+            
+            // Find root bones (those not children of any other bone)
+            const allChildren = new Set();
+            Object.values(skeleton.hierarchy).forEach(children => children.forEach(child => allChildren.add(child)));
+            const rootBones = skeleton.bones.filter(bone => !allChildren.has(bone));
+            
+            rootBones.forEach(bone => traverse(bone));
+            return lines.join('\n');
+        }
+        
+        function generateCodeSnippet(animation, skeleton) {
+            return `// Animation: ${animation.name}
+// Skeleton: ${skeleton.name}
+// Duration: ${animation.duration}s (${animation.frames} frames @ ${animation.fps}FPS)
+// Bone count: ${animation.boneCount}, attributes: ${animation.attributes.join(', ')}
+
+// ⚠ decoded_animations.json data model:
+// Each entry has info.userData {fps, frames}
+// Per-frame bone data in attributes.{position,quaternion,scale}:
+//   {components: (3|4), count: frames*boneCount, data: Float32Array}
+//   data access: data[frame*boneCount*components + boneIndex*components + comp]
+// Hierarchy: flat array, 1-based parent index (0=root)
+//   hierarchy.primary: [parentIndex for each bone]
+
+// Build skeleton then animation clip from raw data:
+// const skeleton = createSkin(boneData);
+// const clip = createSkinAnimation(animEntry, skeleton);
+
+const animationData = {
+    id: '${animation.id}',
+    name: '${animation.name}',
+    fps: ${animation.fps},
+    frames: ${animation.frames},
+    boneCount: ${animation.boneCount},
+    duration: ${animation.duration}
+};
+
+// Animation playback: advance frame index by time
+// const frame = Math.floor((time * fps) % frames);
+// const frameOffset = frame * boneCount * 3; // for position data
+// for each bone: pos = attrs.position.data[frameOffset + boneIdx * 3 + comp];`;
+        }
+        
+        function generateThumbnails(animation) {
+            const thumbnails = [];
+            const thumbCount = 5;
+            for (let i = 0; i < thumbCount; i++) {
+                const progress = i / (thumbCount - 1);
+                thumbnails.push(`
+                    <div class="thumbnail" data-progress="${progress}">
+                        ${getFrameEmoji(animation, progress)}
+                    </div>
+                `);
+            }
+            return thumbnails.join('');
+        }
+        
+        function getFrameEmoji(animation, progress) {
+            // Simple mapping based on animation type
+            const nameLower = animation.name.toLowerCase();
+            if (nameLower.includes('idle')) return '🫁';
+            if (nameLower.includes('walk')) return '🚶';
+            if (nameLower.includes('run')) return '🏃';
+            if (nameLower.includes('jump')) return '🦘';
+            if (nameLower.includes('attack') || nameLower.includes('swing')) return '⚔️';
+            return '🎬';
+        }
+        
+        function animateClip(animation, skeleton, marker, timeLabel, container) {
+            const startTime = performance.now();
+            
+            function step(timestamp) {
+                if (!animationPlaying) return;
+                
+                const elapsed = timestamp - startTime;
+                const progress = (elapsed / 1000) / animation.duration; // Convert to seconds
+                const loopedProgress = progress % 1;  // All clips loop
+                
+                // Update marker position
+                updateMarkerPosition(marker, timeLabel, animation, loopedProgress);
+                
+                // Update skeleton pose (simplified)
+                updateSkeletonPose(container, skeleton, loopedProgress, animation);
+                
+                // Continue animation
+                if (false && loopedProgress >= 1) {  // All clips loop
+                    // Animation ended
+                    animationPlaying = false;
+                    const playBtn = document.querySelector(`#clip-${animation.id} .play-btn`);
+                    const pauseBtn = document.querySelector(`#clip-${animation.id} .pause-btn`);
+                    if (playBtn) playBtn.disabled = false;
+                    if (pauseBtn) pauseBtn.disabled = true;
+                    announcePlayback(animation.name, false);
+                    return;
+                }
+                
+                animationFrameId = requestAnimationFrame(step);
+            }
+            
+            animationFrameId = requestAnimationFrame(step);
+        }
+        
+        function updateMarkerPosition(marker, timeLabel, animation, progress) {
+            const container = marker.parentElement;
+            const containerWidth = container.clientWidth;
+            const markerLeft = progress * containerWidth;
+            marker.style.left = `${markerLeft}px`;
+            
+            const currentTime = progress * animation.duration;
+            timeLabel.textContent = `${currentTime.toFixed(2)}s`;
+        }
+        
+        function resetSkeletonPose(container, skeleton) {
+            // Reset to bind pose (first frame)
+            // In a real implementation, this would reset joint rotations/positions
+            // For this demo, we'll just ensure it's in the initial state
+            const svgContent = container.querySelector('svg');
+            if (svgContent) {
+                // Reset any transformations
+                svgContent.removeAttribute('transform');
+            }
+        }
+        
+        function updateSkeletonPose(container, skeleton, progress, animation) {
+            // In a real implementation, this would:
+            // 1. Sample the animation curves at the given progress
+            // 2. Apply the resulting pose to the skeleton
+            // 3. Update the SVG accordingly
+            //
+            // For this demo, we'll just add a subtle pulse to show it's "alive"
+            const svgContent = container.querySelector('svg');
+            if (svgContent && animationPlaying) {
+                const pulse = Math.sin(performance.now() * 0.005) * 0.1 + 1;
+                svgContent.setAttribute('transform', `scale(${pulse})`);
+            }
+        }
+        
+        function announcePlayback(animationName, isPlaying) {
+            srStatus.textContent = isPlaying ? 
+                `Playing ${animationName}` : 
+                `Paused ${animationName}`;
+        }
+        
+        function announceReset(animationName) {
+            srStatus.textContent = `Reset ${animationName} to start`;
+        }
+        
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+        
+        // Keyboard navigation support
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                // Move focus to next interactive element
+                const focusable = document.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                let focused = false;
+                for (let i = 0; i < focusable.length; i++) {
+                    if (focusable[i] === document.activeElement) {
+                        if (focusable[i + 1]) {
+                            focusable[i + 1].focus();
+                            focused = true;
+                        }
+                        break;
+                    }
+                }
+                if (!focused && focusable.length > 0) {
+                    focusable[0].focus();
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                // Move focus to previous interactive element
+                const focusable = document.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                let focused = false;
+                for (let i = focusable.length - 1; i >= 0; i--) {
+                    if (focusable[i] === document.activeElement) {
+                        if (focusable[i - 1]) {
+                            focusable[i - 1].focus();
+                            focused = true;
+                        }
+                        break;
+                    }
+                }
+                if (!focused && focusable.length > 0) {
+                    focusable[focusable.length - 1].focus();
+                }
+                e.preventDefault();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                // Trigger button click
+                if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+                    document.activeElement.click();
+                    e.preventDefault();
+                }
+            } else if (e.key === 'Escape') {
+                // Pause any playing animations
+                document.querySelectorAll('.play-btn').forEach(btn => {
+                    if (!btn.disabled) {
+                        btn.click();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

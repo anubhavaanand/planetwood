@@ -1,0 +1,2833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood Interactive Prototype</title>
+  <!-- Global Tab-order: Enter=Chat, B=Emote Picker, Tab=Player List, ESC=Settings, WASD=Move (in-game) -->
+  <!-- Favicon: inline SVG as specified -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🌳</text></svg>">
+  <style>
+    /* === GLOBAL BRAND TOKENS (Planetwood) === */
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: #283436;
+      --surface: rgba(60, 72, 74, 0.9);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --backdrop-blur: blur(8px);
+      --red-status: #c0392b;
+      --amber-status: #f39c12;
+      --purple-status: #9b59b6;
+
+      /* Specific colors for components */
+      --loading-bg: #283436;
+      --error-bg: #283436;
+      --error-icon-color-red: #c0392b; /* For error, kicked */
+      --error-icon-color-amber: #f39c12; /* For timeout */
+
+      /* Focus outline, consistent across components */
+      --focus-outline-color: var(--primary-green);
+      --focus-outline-width: 2px;
+    }
+
+    /* === BASE STYLES === */
+    body {
+      margin: 0;
+      overflow: hidden; /* Prevent body scrollbars */
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background: var(--dark-bg); /* Default background for the "world" */
+      color: var(--white-text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      user-select: none; /* Prevent text selection by default */
+    }
+
+    button, input, select {
+      font-family: inherit;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      user-select: none;
+    }
+
+    /* === WORLD VISUALIZATION === */
+    .world-area {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, #1a2a2e 0%, var(--dark-bg) 70%); /* Dark gradient background */
+      perspective: 1000px; /* For subtle 3D effect */
+      overflow: hidden;
+      z-index: 50; /* Base layer */
+    }
+
+    /* Subtle particle effect (CSS circles) */
+    .particle {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: float-particle linear infinite;
+    }
+    .particle:nth-child(1) { width: 3px; height: 3px; top: 10%; left: 20%; animation-duration: 15s; }
+    .particle:nth-child(2) { width: 2px; height: 2px; top: 30%; left: 50%; animation-duration: 20s; animation-delay: 5s; }
+    .particle:nth-child(3) { width: 4px; height: 4px; top: 70%; left: 80%; animation-duration: 12s; animation-delay: 2s; }
+    .particle:nth-child(4) { width: 2px; height: 2px; top: 50%; left: 10%; animation-duration: 18s; animation-delay: 8s; }
+    .particle:nth-child(5) { width: 3px; height: 3px; top: 85%; left: 40%; animation-duration: 16s; animation-delay: 1s; }
+
+    @keyframes float-particle {
+      0% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+      50% { transform: translate(100px, 50px) scale(1.1); opacity: 0.5; }
+      100% { transform: translate(0, 0) scale(1); opacity: 0.2; }
+    }
+
+    /* CSS "ground plane" */
+    .ground-plane {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 150px; /* Height of the ground suggestion */
+      background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%);
+      transform: rotateX(70deg) translateY(50px); /* Angle it to suggest perspective */
+      transform-origin: bottom center;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      z-index: 60;
+      pointer-events: none;
+      box-shadow: 0 -20px 40px rgba(0,0,0,0.5); /* Shadow for depth */
+    }
+
+    /* --- NAMEPLATE MOCKUP (Embedded & dynamic) --- */
+    .nameplate {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      background: rgba(40, 52, 54, 0.8);
+      border-radius: var(--radius);
+      padding: 4px 8px;
+      gap: 6px;
+      white-space: nowrap;
+      pointer-events: auto; /* Clickable */
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      transition: background 0.15s ease-out;
+      z-index: 55; /* Above world, below HUD */
+    }
+    .nameplate:hover {
+      background: var(--surface);
+    }
+    .nameplate.hidden {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+      transition: opacity 0.3s ease-out, visibility 0.3s;
+    }
+    .nameplate .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted-text); /* Default muted */
+      flex-shrink: 0;
+    }
+    .nameplate .status-dot.online { background: var(--primary-green); }
+    .nameplate .status-dot.away { background: var(--amber-status); }
+    .nameplate .status-dot.disconnected { background: var(--red-status); }
+    .nameplate .player-name {
+      color: var(--white-text);
+      font-size: 13px;
+      font-weight: bold;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .nameplate .you-badge {
+      background: var(--primary-green);
+      color: var(--white-text);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 4px;
+      font-weight: bold;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    /* Scale for depth effect */
+    .nameplate.scale-sm { transform: translate(-50%, -50%) scale(0.8); }
+    .nameplate.scale-md { transform: translate(-50%, -50%) scale(1); }
+    .nameplate.scale-lg { transform: translate(-50%, -50%) scale(1.2); }
+
+    /* === CONTROL BUTTONS (Floating Toolbar) === */
+    .control-buttons {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      background: var(--surface);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      z-index: 100; /* Below HUD, above world */
+    }
+    .control-buttons button {
+      background: var(--dark-bg);
+      color: var(--white-text);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.15s ease-out, border-color 0.15s ease-out;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1;
+    }
+    .control-buttons button:hover {
+      background: var(--accent-hover);
+      border-color: var(--primary-green);
+    }
+    .control-buttons button:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .control-buttons button .icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+    .control-buttons .auto-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted-text);
+      font-size: 12px;
+    }
+    .control-buttons .auto-toggle input[type="checkbox"] {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background-color: var(--dark-bg);
+      cursor: pointer;
+      position: relative;
+      transition: background-color 0.15s ease-out;
+      flex-shrink: 0;
+    }
+    .control-buttons .auto-toggle input[type="checkbox"]:checked {
+      background-color: var(--primary-green);
+      border-color: var(--primary-green);
+    }
+    .control-buttons .auto-toggle input[type="checkbox"]:checked::after {
+      content: '✔';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 12px;
+      color: var(--white-text);
+    }
+    .control-buttons .auto-toggle input[type="checkbox"]:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+
+    /* === ACCESSIBILITY: Screen reader only content === */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+
+    /* === REDUCED MOTION === */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    /* === COMPONENT STYLES (inlined and adapted from previous outputs) === */
+
+    /* HUD */
+    .hud-container {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 150;
+      opacity: 0; /* Initially hidden */
+      visibility: hidden;
+      transition: opacity 0.3s ease-out, visibility 0.3s;
+    }
+    .hud-container.is-visible {
+      opacity: 1;
+      visibility: visible;
+    }
+    .hud-item {
+      background: var(--dark-bg);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .hud-item .icon {
+      font-size: 14px;
+      color: var(--primary-green);
+    }
+    .hud-item .value {
+      color: var(--white-text);
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .hud-item .connection-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--muted-text);
+      flex-shrink: 0;
+    }
+    .hud-item .connection-dot.good { background: var(--primary-green); }
+    .hud-item .connection-dot.fair { background: var(--amber-status); }
+    .hud-item .connection-dot.poor { background: var(--red-status); }
+
+    /* Loading Screen */
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--loading-bg);
+      z-index: 20000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease-out, visibility 0.4s;
+      opacity: 1;
+      visibility: visible;
+    }
+    .loading-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .loading-screen h1 {
+      color: var(--white-text);
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      margin-bottom: 10px;
+    }
+    .loading-screen .tagline {
+      color: var(--muted-text);
+      font-size: 11px;
+      margin-bottom: 40px;
+    }
+    .loading-screen .planet-anim {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      margin-bottom: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-screen .planet-anim .ring {
+      position: absolute;
+      border-radius: 50%;
+      border-style: solid;
+    }
+    .loading-screen .planet-anim .ring.outer {
+      width: 80px; height: 80px;
+      border-width: 2px;
+      border-color: rgba(78,140,109,0.3);
+      animation: spin-cw 8s linear infinite;
+    }
+    .loading-screen .planet-anim .ring.middle {
+      width: 60px; height: 60px;
+      border-width: 2px;
+      border-color: rgba(78,140,109,0.5);
+      animation: spin-ccw 12s reverse linear infinite;
+    }
+    .loading-screen .planet-anim .dot {
+      width: 30px; height: 30px;
+      background-color: var(--primary-green);
+      border-radius: 50%;
+      animation: pulse-opacity 2s ease-in-out infinite alternate;
+    }
+    @keyframes spin-cw { from { transform: rotate(0deg); } to { transform: rotate(360deg); }}
+    @keyframes spin-ccw { from { transform: rotate(0deg); } to { transform: rotate(-360deg); }}
+    @keyframes pulse-opacity {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    .loading-screen .progress-bar-container {
+      width: 200px;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      margin-bottom: 15px;
+    }
+    .loading-screen .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--primary-green);
+      border-radius: 2px;
+      transition: width 0.2s ease-out;
+    }
+    .loading-screen .status-text {
+      color: var(--muted-text);
+      font-size: 14px;
+    }
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .loading-screen .planet-anim .ring,
+      .loading-screen .planet-anim .dot {
+        animation: none !important;
+      }
+      .loading-screen .progress-bar {
+        transition: none !important;
+      }
+    }
+
+
+    /* Notifications */
+    .notifications-container {
+      position: fixed;
+      top: 20px;
+      right: 20px; /* Adjusted to be right, not center */
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: flex-end; /* Stack from right */
+      z-index: 200;
+      pointer-events: none; /* Container does not block clicks */
+    }
+    .notification-toast {
+      background: var(--surface);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      max-width: 400px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateX(100%); /* Slide in from right */
+      opacity: 0;
+      transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+      pointer-events: auto; /* Toast itself is clickable */
+      cursor: pointer;
+      border-left: 4px solid var(--primary-green); /* Default type */
+    }
+    .notification-toast.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    .notification-toast.hide {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    .notification-toast .message {
+      color: var(--white-text);
+      font-size: 14px;
+      line-height: 1.4;
+      flex-grow: 1;
+    }
+    .notification-toast.type-join { border-left-color: var(--primary-green); }
+    .notification-toast.type-leave { border-left-color: var(--red-status); }
+    .notification-toast.type-system { border-left-color: var(--amber-status); }
+    .notification-toast.type-achievement { border-left-color: var(--purple-status); }
+    .notification-toast.type-default { border-left-color: var(--primary-green); }
+
+    /* Emote Picker */
+    .emote-picker-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease-out, visibility 0.2s;
+      background: rgba(0,0,0,0.4); /* Subtle backdrop */
+    }
+    .emote-picker-overlay.is-open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .emote-picker-panel {
+      background: var(--surface);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      width: 300px; /* ~300x320px */
+      padding: 16px;
+      transform: translateY(20px);
+      opacity: 0;
+      transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+    }
+    .emote-picker-overlay.is-open .emote-picker-panel {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .emote-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .emote-picker-cell {
+      background: var(--dark-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+      cursor: pointer;
+      transition: background 0.1s ease-out, border-color 0.1s ease-out;
+      min-height: 80px; /* Ensure cells are large enough */
+    }
+    .emote-picker-cell:hover, .emote-picker-cell:focus-visible {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--primary-green);
+      outline: none; /* Handled by custom focus styling */
+    }
+    .emote-picker-cell:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .emote-picker-cell .emoji {
+      font-size: 48px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .emote-picker-cell .label {
+      font-size: 11px;
+      color: var(--muted-text);
+      text-align: center;
+    }
+
+    /* Player List */
+    .player-list-wrapper {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 400; /* Above notifications, below emote picker */
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    .player-list-toggle {
+      width: 32px;
+      height: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      color: var(--white-text);
+      font-size: 16px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 0.15s ease-out;
+      position: relative;
+    }
+    .player-list-toggle:hover {
+      background: var(--accent-hover);
+    }
+    .player-list-toggle:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .player-list-toggle .count-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: var(--primary-green);
+      color: var(--white-text);
+      font-size: 9px;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: var(--radius);
+      font-weight: bold;
+      min-width: 18px;
+      text-align: center;
+      display: none; /* Only show if count > 0 */
+    }
+    .player-list-toggle .count-badge.visible {
+      display: block;
+    }
+    .player-list-panel {
+      width: 220px;
+      max-height: 400px;
+      background: var(--surface);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      transform: translateX(100%); /* Start off-screen right */
+      opacity: 0;
+      visibility: hidden;
+      transition: transform 0.2s ease-out, opacity 0.2s ease-out, visibility 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+    .player-list-panel.is-open {
+      transform: translateX(0);
+      opacity: 1;
+      visibility: visible;
+    }
+    .player-list-header {
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.2);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--primary-green);
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .player-list-header:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .player-list-header .chevron {
+      font-size: 18px;
+      line-height: 1;
+      transition: transform 0.2s ease-out;
+    }
+    .player-list-panel.is-collapsed .player-list-header .chevron {
+      transform: rotate(180deg);
+    }
+    .player-list-entries {
+      flex-grow: 1;
+      overflow-y: auto;
+      max-height: 350px; /* Adjust based on panel max-height and header */
+      padding: 8px 0;
+    }
+    .player-list-panel.is-collapsed .player-list-entries {
+      display: none;
+    }
+    .player-list-entry {
+      display: flex;
+      align-items: center;
+      padding: 6px 14px;
+      gap: 8px;
+      color: var(--white-text);
+      font-size: 13px;
+      border-bottom: 1px solid transparent;
+      transition: background 0.1s ease-out;
+      cursor: pointer;
+    }
+    .player-list-entry:hover {
+      background: rgba(255,255,255,0.05);
+    }
+    .player-list-entry:not(:last-child) {
+      border-bottom: 1px solid var(--border-color);
+    }
+    .player-list-entry .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted-text);
+      flex-shrink: 0;
+    }
+    .player-list-entry .status-dot.online { background: var(--primary-green); }
+    .player-list-entry .status-dot.away { background: var(--amber-status); }
+    .player-list-entry .status-dot.disconnected { background: var(--red-status); }
+    .player-list-entry .name {
+      flex-grow: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .player-list-entry .you-badge {
+      background: var(--primary-green);
+      color: var(--white-text);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    /* Settings Panel */
+    .settings-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(40, 52, 54, 0.7);
+      z-index: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease-out, visibility 0.3s;
+    }
+    .settings-backdrop.is-open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .settings-panel {
+      background: var(--surface);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      width: 400px;
+      max-height: 90vh;
+      overflow-y: auto;
+      transform: scale(0.9);
+      opacity: 0;
+      transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+      position: relative; /* For close button positioning */
+    }
+    .settings-backdrop.is-open .settings-panel {
+      transform: scale(1);
+      opacity: 1;
+    }
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .settings-header h2 {
+      margin: 0;
+      color: var(--white-text);
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .settings-close-button {
+      background: transparent;
+      border: none;
+      color: var(--white-text);
+      font-size: 24px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+    }
+    .settings-close-button:hover {
+      color: var(--red-status);
+    }
+    .settings-close-button:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .settings-section {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .settings-section:last-child {
+      border-bottom: none;
+    }
+    .settings-section h3 {
+      color: var(--primary-green);
+      font-size: 16px;
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+    .settings-control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .settings-control-row label {
+      color: var(--white-text);
+      font-size: 14px;
+      flex-grow: 1;
+    }
+    .settings-control-row.key-binding {
+      justify-content: flex-start;
+      gap: 20px;
+      margin-bottom: 8px;
+    }
+    .settings-control-row.key-binding .key {
+      background: var(--dark-bg);
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: var(--white-text);
+      font-size: 13px;
+      font-family: monospace;
+      min-width: 60px;
+      text-align: center;
+    }
+    .settings-control-row.key-binding .action {
+      color: var(--muted-text);
+      font-size: 14px;
+    }
+
+    /* Slider styling */
+    .settings-control-row input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 150px;
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .settings-control-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      background: var(--primary-green);
+      border-radius: 50%;
+      cursor: grab;
+      border: 2px solid var(--primary-green);
+      box-shadow: 0 0 0 2px var(--dark-bg);
+      transition: background 0.15s ease-out;
+    }
+    .settings-control-row input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      background: var(--primary-green);
+      border-radius: 50%;
+      cursor: grab;
+      border: 2px solid var(--primary-green);
+      box-shadow: 0 0 0 2px var(--dark-bg);
+      transition: background 0.15s ease-out;
+    }
+    .settings-control-row input[type="range"]::-webkit-slider-thumb:hover,
+    .settings-control-row input[type="range"]::-moz-range-thumb:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .settings-control-row input[type="range"]:focus-visible::-webkit-slider-thumb {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: 2px;
+    }
+    .settings-control-row input[type="range"]:focus-visible::-moz-range-thumb {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: 2px;
+    }
+
+    /* Toggle switch styling */
+    .settings-toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+      margin-left: 10px;
+      flex-shrink: 0;
+    }
+    .settings-toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .settings-toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255,255,255,0.1);
+      transition: 0.2s;
+      border-radius: 22px;
+    }
+    .settings-toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 2px;
+      bottom: 2px;
+      background-color: var(--white-text);
+      transition: 0.2s;
+      border-radius: 50%;
+    }
+    .settings-toggle-switch input:checked + .settings-toggle-slider {
+      background-color: var(--primary-green);
+    }
+    .settings-toggle-switch input:checked + .settings-toggle-slider:before {
+      transform: translateX(18px);
+    }
+    .settings-toggle-switch input:focus-visible + .settings-toggle-slider {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+
+    /* Dropdown styling */
+    .settings-control-row select {
+      background: var(--dark-bg);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      color: var(--white-text);
+      padding: 6px 10px;
+      font-size: 13px;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 16px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .settings-control-row select:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+
+    .settings-about {
+      color: var(--muted-text);
+      font-size: 11px;
+      text-align: center;
+      padding-top: 10px;
+    }
+
+
+    /* Error Screen */
+    .error-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--error-bg);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease-out, visibility 0.4s;
+    }
+    .error-screen.is-visible {
+      opacity: 1;
+      visibility: visible;
+    }
+    .error-screen .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+      color: var(--red-status); /* Default icon color */
+    }
+    .error-screen .icon.type-timeout { color: var(--amber-status); }
+    .error-screen .icon.type-disconnect { color: var(--red-status); }
+    .error-screen .icon.type-error { color: var(--red-status); }
+    .error-screen .icon.type-kicked { color: var(--red-status); }
+
+    .error-screen .title {
+      color: var(--white-text);
+      font-size: 22px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .error-screen .message {
+      color: var(--muted-text);
+      font-size: 14px;
+      text-align: center;
+      max-width: 400px;
+      line-height: 1.4;
+      margin-bottom: 20px;
+    }
+    .error-screen .countdown {
+      color: var(--muted-text);
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .error-screen .action-buttons {
+      display: flex;
+      gap: 15px;
+    }
+    .error-screen button {
+      background: var(--primary-green);
+      color: var(--white-text);
+      border: none;
+      border-radius: 8px;
+      padding: 12px 32px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s ease-out;
+    }
+    .error-screen button:hover {
+      background: var(--accent-hover);
+    }
+    .error-screen button:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .error-screen button.secondary {
+      background: var(--dark-bg);
+      border: 1px solid var(--border-color);
+      color: var(--white-text);
+    }
+    .error-screen button.secondary:hover {
+      background: var(--surface);
+      border-color: var(--primary-green);
+    }
+
+    /* Chat Log */
+    .chat-log-wrapper {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 300; /* Above notifications, below emote picker */
+      display: flex;
+      flex-direction: column-reverse; /* Button below panel */
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .chat-log-toggle {
+      width: 48px;
+      height: 48px;
+      background: var(--surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      color: var(--white-text);
+      font-size: 24px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: background 0.15s ease-out;
+      position: relative;
+    }
+    .chat-log-toggle:hover {
+      background: var(--accent-hover);
+    }
+    .chat-log-toggle:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .chat-log-panel {
+      width: 320px;
+      max-height: 240px;
+      background: rgba(40, 52, 54, 0.95);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      transform: translateY(110%); /* Start off-screen below */
+      opacity: 0;
+      visibility: hidden;
+      transition: transform 0.2s ease-out, opacity 0.2s ease-out, visibility 0.2s;
+      display: flex;
+      flex-direction: column;
+      isolation: isolate;
+      position: relative;
+    }
+    .chat-log-panel.is-open {
+      transform: translateY(0);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    .chat-log-panel:focus-visible {
+      outline: var(--focus-outline-width) solid var(--focus-outline-color);
+      outline-offset: var(--focus-outline-width);
+    }
+    .chat-log-entries {
+      flex-grow: 1;
+      padding: 8px 14px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: var(--muted-text) transparent;
+      pointer-events: auto;
+    }
+    .chat-log-entries::-webkit-scrollbar { width: 6px; }
+    .chat-log-entries::-webkit-scrollbar-thumb { background-color: var(--muted-text); border-radius: 999px; }
+    .chat-log-entries::-webkit-scrollbar-track { background-color: transparent; }
+    .chat-log-entry {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-color);
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+    }
+    .chat-log-entry:first-child { border-top: none; }
+    .chat-log-entry:last-child { border-bottom: none; }
+    .chat-log-entry.is-new {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .chat-log-entry .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2px;
+    }
+    .chat-log-entry .name {
+      color: var(--primary-green);
+      font-weight: bold;
+      font-size: 12px;
+      margin-right: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+    }
+    .chat-log-entry .timestamp {
+      color: var(--muted-text);
+      font-size: 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .chat-log-entry .text {
+      color: var(--white-text);
+      font-size: 14px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    .chat-log-empty {
+      color: var(--muted-text);
+      font-size: 14px;
+      text-align: center;
+      padding: 20px;
+      user-select: none;
+      pointer-events: none;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    @media (max-width: 480px) {
+      .chat-log-wrapper {
+        left: 0; right: 0; bottom: 20px;
+        align-items: center;
+      }
+      .chat-log-panel {
+        width: calc(100% - 40px);
+        left: 20px;
+      }
+    }
+
+    /* Chat Input Panel */
+    .chat-input-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200; /* Above world/nameplates, below HUD/notifications */
+      background: rgba(40, 52, 54, 0.85);
+      backdrop-filter: var(--backdrop-blur);
+      -webkit-backdrop-filter: var(--backdrop-blur);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      width: clamp(300px, 90vw, 500px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      display: flex;
+      gap: 10px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease-out, visibility 0.2s;
+    }
+    .chat-input-panel.is-open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .chat-input-panel input[type="text"] {
+      flex-grow: 1;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      color: var(--white-text);
+      font-size: 14px;
+      outline: none;
+    }
+    .chat-input-panel input[type="text"]::placeholder {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .chat-input-panel input[type="text"]:focus-visible {
+      outline: var(--focus-outline-width) solid var(--primary-green);
+      outline-offset: var(--focus-outline-width);
+    }
+    .chat-input-panel button {
+      background: var(--primary-green);
+      color: var(--white-text);
+      border: none;
+      border-radius: var(--radius);
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background 0.15s ease-out;
+      flex-shrink: 0;
+    }
+    .chat-input-panel button:hover {
+      background: var(--accent-hover); /* Primary green for send button hover */
+    }
+    .chat-input-panel button:focus-visible {
+      outline: var(--focus-outline-width) solid var(--primary-green);
+      outline-offset: var(--focus-outline-width);
+    }
+
+
+    /* Chat Bubbles */
+    .chat-bubbles-container {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 100; /* Below HUD, above nameplates */
+    }
+    .chat-bubble {
+      position: absolute;
+      background: rgba(40, 52, 54, 0.9);
+      border-radius: 8px;
+      padding: 8px 14px;
+      max-width: 200px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      transform: translate(-50%, -100%);
+      opacity: 0;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      transition: opacity 0.3s ease-out;
+      pointer-events: none; /* Bubbles don't block clicks */
+    }
+    .chat-bubble.fade-in { opacity: 1; }
+    .chat-bubble.fade-out { opacity: 0; transition: opacity 1s ease-in; }
+    .chat-bubble::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid rgba(40, 52, 54, 0.9);
+    }
+    .chat-bubble .sender-name {
+      color: var(--primary-green);
+      font-size: 11px;
+      font-weight: bold;
+      display: block;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-bubble .message-text {
+      color: var(--white-text);
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 0;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-bubble { transition: none !important; }
+      .chat-bubble.fade-in { opacity: 1; }
+      .chat-bubble.fade-out { opacity: 0; }
+    }
+
+    /* Reduced motion for all */
+    @media (prefers-reduced-motion: reduce) {
+      .hud-container, .loading-screen, .notification-toast,
+      .emote-picker-overlay, .emote-picker-panel,
+      .player-list-panel, .player-list-header .chevron,
+      .settings-backdrop, .settings-panel,
+      .error-screen, .chat-log-panel, .chat-log-entry,
+      .chat-input-panel {
+        transition: none !important;
+        animation: none !important;
+      }
+      .loading-screen .planet-anim .ring,
+      .loading-screen .planet-anim .dot {
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 20000: Loading Screen -->
+  <div class="loading-screen" id="loading-screen" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+    <h1>PLANETWOOD</h1>
+    <p class="tagline">Discover the unknown</p>
+    <div class="planet-anim">
+      <div class="ring outer"></div>
+      <div class="ring middle"></div>
+      <div class="dot"></div>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-bar" id="loading-progress-bar"></div>
+    </div>
+    <p class="status-text" id="loading-status-text" aria-live="polite">Initializing...</p>
+  </div>
+
+  <!-- 50: World Area -->
+  <div class="world-area" id="world-area">
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="particle"></div>
+    <div class="ground-plane"></div>
+
+    <!-- Nameplates will be dynamically inserted here -->
+  </div>
+
+  <!-- 100: Chat Bubbles (container, actual bubbles are dynamic) -->
+  <div class="chat-bubbles-container" aria-live="polite" role="log" id="chat-bubbles-container">
+    <div class="sr-only" id="sr-chat-announcements"></div>
+  </div>
+
+  <!-- 150: HUD -->
+  <div class="hud-container" id="hud-container" role="status" aria-live="polite">
+    <div class="hud-item" aria-label="Player count">
+      <span class="icon" aria-hidden="true">👥</span>
+      <span class="value" id="hud-player-count">0</span>
+    </div>
+    <div class="hud-item" aria-label="Frames per second">
+      <span class="icon" aria-hidden="true">🎯</span>
+      <span class="value" id="hud-fps">0</span>
+    </div>
+    <div class="hud-item" aria-label="Connection quality">
+      <span class="connection-dot good" id="hud-connection-quality" aria-hidden="true"></span>
+      <span class="value">Connected</span>
+    </div>
+  </div>
+
+  <!-- 200: Chat Input Panel -->
+  <div class="chat-input-panel" id="chat-input-panel" role="dialog" aria-modal="false" aria-label="Chat input">
+    <input type="text" id="chat-input-field" placeholder="Press Enter to chat..." maxlength="280" aria-label="Chat message">
+    <button type="button" id="chat-send-button">Send</button>
+  </div>
+
+  <!-- 200: Notifications (container, actual toasts are dynamic) -->
+  <div class="notifications-container" aria-live="polite" role="log" id="notifications-container"></div>
+
+  <!-- 300: Chat Log -->
+  <div class="chat-log-wrapper" id="chat-log-wrapper">
+    <button type="button" class="chat-log-toggle" aria-label="Toggle chat history" aria-expanded="false" aria-controls="chat-log-panel">💬</button>
+    <div id="chat-log-panel" class="chat-log-panel" role="dialog" aria-modal="false" aria-label="Chat history">
+      <div class="sr-only" id="sr-chat-announcements-log" aria-live="polite"></div>
+      <div class="chat-log-entries" role="log" aria-label="Chat messages history" tabindex="-1">
+        <div class="chat-log-empty">No messages yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 400: Player List -->
+  <div class="player-list-wrapper" id="player-list-wrapper">
+    <button type="button" class="player-list-toggle" aria-label="Toggle player list" aria-expanded="false" aria-controls="player-list-panel">
+      👥
+      <span class="count-badge" id="player-list-toggle-badge">0</span>
+    </button>
+    <div class="player-list-panel" id="player-list-panel">
+      <div class="player-list-header" tabindex="0" role="button" aria-expanded="true">
+        Players (<span id="player-list-count">0</span>)
+        <span class="chevron" aria-hidden="true">▼</span>
+      </div>
+      <div class="player-list-entries" role="list" aria-label="Connected players list">
+        <!-- Player list items will be inserted here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 500: Emote Picker -->
+  <div class="emote-picker-overlay" id="emote-picker-overlay">
+    <div class="emote-picker-panel" role="dialog" aria-modal="true" aria-label="Emote picker">
+      <div class="sr-only" id="sr-emote-announcements" aria-live="polite"></div>
+      <div class="emote-picker-grid" role="grid">
+        <!-- Emote cells will be inserted here by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 600: Settings Panel -->
+  <div class="settings-backdrop" id="settings-backdrop">
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-header">
+        <h2>Settings</h2>
+        <button type="button" class="settings-close-button" aria-label="Close settings">✕</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-section">
+          <h3>Audio</h3>
+          <div class="settings-control-row">
+            <label for="master-volume">Master Volume</label>
+            <input type="range" id="master-volume" min="0" max="100" value="80" role="slider" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" aria-label="Master Volume">
+          </div>
+          <div class="settings-control-row">
+            <label for="mute-toggle">Mute Audio</label>
+            <label class="settings-toggle-switch">
+              <input type="checkbox" id="mute-toggle" aria-label="Mute Audio">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Graphics</h3>
+          <div class="settings-control-row">
+            <label for="quality-dropdown">Quality</label>
+            <select id="quality-dropdown" aria-label="Graphics Quality">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high" selected>High</option>
+              <option value="ultra">Ultra</option>
+            </select>
+          </div>
+          <div class="settings-control-row">
+            <label for="fps-toggle">Show FPS</label>
+            <label class="settings-toggle-switch">
+              <input type="checkbox" id="fps-toggle" aria-label="Show FPS">
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Controls</h3>
+          <div class="settings-control-row key-binding">
+            <div class="key">WASD</div>
+            <div class="action">Move</div>
+          </div>
+          <div class="settings-control-row key-binding">
+            <div class="key">Enter</div>
+            <div class="action">Chat</div>
+          </div>
+          <div class="settings-control-row key-binding">
+            <div class="key">B</div>
+            <div class="action">Emote</div>
+          </div>
+          <div class="settings-control-row key-binding">
+            <div class="key">Tab</div>
+            <div class="action">Player List</div>
+          </div>
+          <div class="settings-control-row key-binding">
+            <div class="key">Esc</div>
+            <div class="action">Settings / Close</div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>About</h3>
+          <p class="settings-about">Planetwood v0.1.0</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10000: Error Screen -->
+  <div class="error-screen" id="error-screen" role="alertdialog" aria-modal="true" aria-label="Connection Lost">
+    <p class="icon" id="error-icon" aria-hidden="true">⚠️</p>
+    <h2 class="title" id="error-title">Connection Lost</h2>
+    <p class="message" id="error-message">You have been disconnected from the server.</p>
+    <p class="countdown" id="error-countdown">Auto-reconnecting in 10...</p>
+    <div class="action-buttons">
+      <button type="button" id="error-reconnect-button">Reconnect</button>
+      <button type="button" id="error-back-to-menu-button" class="secondary">Back to Menu</button>
+    </div>
+  </div>
+
+  <!-- Floating toolbar for simulation controls -->
+  <div class="control-buttons">
+    <button type="button" id="sim-join"><span class="icon">🎮</span> Simulate Join</button>
+    <button type="button" id="sim-chat"><span class="icon">💬</span> Simulate Chat</button>
+    <button type="button" id="sim-emote"><span class="icon">😄</span> Simulate Emote</button>
+    <button type="button" id="sim-settings"><span class="icon">⚙️</span> Settings</button>
+    <button type="button" id="sim-error"><span class="icon">⚠️</span> Simulate Error</button>
+    <button type="button" id="sim-leave"><span class="icon">🚪</span> Leave World</button>
+    <label class="auto-toggle">
+      <input type="checkbox" id="auto-simulate-toggle" checked> Auto
+    </label>
+  </div>
+
+  <script>
+    // === GLOBAL UTILITIES ===
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(text));
+      return div.innerHTML;
+    }
+
+    // === COMPONENT JAVASCRIPT (INLINED AND ADAPTED) ===
+
+    // --- LoadingScreen ---
+    window.LoadingScreen = (function() {
+      const loadingScreen = document.getElementById('loading-screen');
+      const progressBar = document.getElementById('loading-progress-bar');
+      const statusText = document.getElementById('loading-status-text');
+
+      return {
+        show: function() {
+          loadingScreen.classList.remove('hidden');
+          loadingScreen.setAttribute('aria-hidden', 'false');
+          // Reset for new loading sequence
+          this.setProgress(0);
+          this.setStatus('Initializing...');
+        },
+        hide: function() {
+          loadingScreen.classList.add('hidden');
+          loadingScreen.setAttribute('aria-hidden', 'true');
+        },
+        setProgress: function(value) { // value 0-100
+          progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+          loadingScreen.setAttribute('aria-valuenow', value);
+        },
+        setStatus: function(text) {
+          statusText.textContent = text;
+        }
+      };
+    })();
+
+    // --- HUD ---
+    window.HUD = (function() {
+      const hudContainer = document.getElementById('hud-container');
+      const playerCountSpan = document.getElementById('hud-player-count');
+      const fpsSpan = document.getElementById('hud-fps');
+      const connectionQualityDot = document.getElementById('hud-connection-quality');
+
+      let lastFrameTime = 0;
+      let frameCount = 0;
+      let rafId;
+
+      function updateFPS(timestamp) {
+        if (!lastFrameTime) lastFrameTime = timestamp;
+        frameCount++;
+        const elapsed = timestamp - lastFrameTime;
+
+        if (elapsed > 1000) { // Update FPS every second
+          const currentFPS = Math.round((frameCount * 1000) / elapsed);
+          fpsSpan.textContent = currentFPS;
+          frameCount = 0;
+          lastFrameTime = timestamp;
+        }
+        rafId = requestAnimationFrame(updateFPS);
+      }
+
+      return {
+        init: function() {
+          hudContainer.classList.add('is-visible');
+          if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+             rafId = requestAnimationFrame(updateFPS);
+          } else {
+             fpsSpan.textContent = '60'; // Static FPS for reduced motion
+          }
+        },
+        destroy: function() {
+          if (rafId) cancelAnimationFrame(rafId);
+          hudContainer.classList.remove('is-visible');
+        },
+        setPlayerCount: function(n) {
+          playerCountSpan.textContent = n;
+        },
+        setFPS: function(n) { // Allows external override if game engine provides it
+          if (rafId) cancelAnimationFrame(rafId); // Stop internal if external takes over
+          fpsSpan.textContent = n;
+        },
+        setConnectionQuality: function(status) { // "good"|"fair"|"poor"
+          connectionQualityDot.className = `connection-dot ${status}`;
+          hudContainer.setAttribute('aria-label', `Player count ${playerCountSpan.textContent}, FPS ${fpsSpan.textContent}, Connection quality ${status}`);
+        }
+      };
+    })();
+
+    // --- Notifications ---
+    window.Notifications = (function() {
+      const notificationsContainer = document.getElementById('notifications-container');
+      const MAX_VISIBLE_TOASTS = 3;
+      const DEFAULT_DURATION = 4000; // ms
+
+      return {
+        show: function({ text, type = 'default', duration = DEFAULT_DURATION }) {
+          // Remove oldest if max visible reached
+          const visibleToasts = notificationsContainer.querySelectorAll('.notification-toast.show');
+          if (visibleToasts.length >= MAX_VISIBLE_TOASTS) {
+            visibleToasts[0].remove(); // Directly remove without animation for queueing
+          }
+
+          const toast = document.createElement('div');
+          toast.classList.add('notification-toast', `type-${type}`);
+          toast.setAttribute('role', 'status');
+          toast.setAttribute('aria-live', 'polite');
+          toast.setAttribute('tabindex', '0'); // Make focusable for screen readers
+
+          const messageSpan = document.createElement('span');
+          messageSpan.classList.add('message');
+          messageSpan.textContent = text; // XSS safe by design, but textContent for robustness
+          toast.appendChild(messageSpan);
+
+          notificationsContainer.appendChild(toast);
+
+          // Trigger slide-in animation
+          requestAnimationFrame(() => {
+            toast.classList.add('show');
+          });
+
+          // Auto-dismiss after duration
+          const timeoutId = setTimeout(() => {
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+          }, duration);
+
+          // Click to dismiss immediately
+          toast.addEventListener('click', () => {
+            clearTimeout(timeoutId);
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+          });
+          return toast;
+        },
+        clear: function() {
+          notificationsContainer.querySelectorAll('.notification-toast').forEach(toast => {
+            clearTimeout(toast.dataset.timeoutId); // Clear any pending dismiss
+            toast.classList.remove('show');
+            toast.classList.add('hide');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+          });
+        }
+      };
+    })();
+
+    // --- ChatInput Panel ---
+    window.ChatPanel = (function() {
+      const chatInputPanel = document.getElementById('chat-input-panel');
+      const chatInputField = document.getElementById('chat-input-field');
+      const chatSendButton = document.getElementById('chat-send-button');
+
+      let panelIsOpen = false;
+      let lastFocusedElement = null;
+      let lastMessageTime = 0;
+      const RATE_LIMIT_MS = 2000;
+
+      function handleKeydown(e) {
+        if (e.key === 'Enter') {
+          if (!panelIsOpen) {
+            window.ChatPanel.open();
+            e.preventDefault(); // Prevent Enter from doing anything else if chat not open
+          } else {
+            sendMessage();
+            e.preventDefault();
+          }
+        } else if (e.key === 'Escape' && panelIsOpen) {
+          window.ChatPanel.close();
+          e.preventDefault();
+        }
+      }
+
+      function sendMessage() {
+        const now = Date.now();
+        if (now - lastMessageTime < RATE_LIMIT_MS) {
+          // console.log('Chat rate limited. Message suppressed.');
+          return; // Silently suppress
+        }
+
+        const message = chatInputField.value.trim();
+        if (message) {
+          document.dispatchEvent(new CustomEvent('chat:send', { detail: { message: message } }));
+          chatInputField.value = '';
+          lastMessageTime = now;
+          // After sending, close the panel automatically if not immediately typing another message
+          setTimeout(() => {
+            if (chatInputField.value === '') {
+                window.ChatPanel.close();
+            }
+          }, 50); // Small delay to allow rapid typing
+        }
+      }
+
+      document.addEventListener('keydown', handleKeydown);
+      chatSendButton.addEventListener('click', sendMessage);
+
+      return {
+        open: function() {
+          if (panelIsOpen) return;
+          panelIsOpen = true;
+          lastFocusedElement = document.activeElement; // Save currently focused element
+          chatInputPanel.classList.add('is-open');
+          chatInputPanel.setAttribute('aria-modal', 'true');
+          chatInputField.focus();
+        },
+        close: function() {
+          if (!panelIsOpen) return;
+          panelIsOpen = false;
+          chatInputPanel.classList.remove('is-open');
+          chatInputPanel.setAttribute('aria-modal', 'false');
+          if (lastFocusedElement) {
+            lastFocusedElement.focus(); // Restore focus to where it was
+            lastFocusedElement = null;
+          } else {
+            document.body.focus(); // Fallback focus
+          }
+        },
+        get isOpen() {
+          return panelIsOpen;
+        }
+      };
+    })();
+
+    // --- Chat Bubbles ---
+    window.ChatBubbles = (function() {
+      const container = document.getElementById('chat-bubbles-container');
+      const srAnnouncements = document.getElementById('sr-chat-announcements');
+
+      // Map: senderId -> { element: HTMLDivElement, timeoutId: number }
+      const activeBubbles = new Map();
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const fadeInDuration = prefersReducedMotion ? 0 : 300; // ms
+      const fadeOutDuration = prefersReducedMotion ? 0 : 1000; // ms
+      const displayDuration = 5000; // ms
+
+      return {
+        showMessage: function({ senderId, name, text, x = 0, y = 0 }) {
+          if (activeBubbles.has(senderId)) {
+            const existing = activeBubbles.get(senderId);
+            clearTimeout(existing.timeoutId);
+            existing.element.remove();
+            activeBubbles.delete(senderId);
+          }
+
+          const bubble = document.createElement('div');
+          bubble.classList.add('chat-bubble');
+          bubble.setAttribute('data-sender-id', senderId);
+
+          const senderName = document.createElement('span');
+          senderName.classList.add('sender-name');
+          senderName.textContent = escapeHtml(name);
+          bubble.appendChild(senderName);
+
+          const messageText = document.createElement('p');
+          messageText.classList.add('message-text');
+          messageText.textContent = escapeHtml(text);
+          bubble.appendChild(messageText);
+
+          container.appendChild(bubble);
+
+          bubble.style.left = `${x}px`;
+          bubble.style.top = `${y}px`;
+
+          requestAnimationFrame(() => {
+            bubble.classList.add('fade-in');
+          });
+
+          const timeoutId = setTimeout(() => {
+            bubble.classList.remove('fade-in');
+            bubble.classList.add('fade-out');
+            setTimeout(() => {
+              bubble.remove();
+              activeBubbles.delete(senderId);
+            }, fadeOutDuration);
+          }, displayDuration);
+
+          activeBubbles.set(senderId, { element: bubble, timeoutId: timeoutId });
+
+          const announcementText = `Chat from ${escapeHtml(name)}: ${escapeHtml(text.substring(0, 120))}`;
+          srAnnouncements.textContent = announcementText;
+          setTimeout(() => srAnnouncements.textContent = '', 100);
+        },
+        updatePositions: function(bubblesData) {
+          bubblesData.forEach(data => {
+            const entry = activeBubbles.get(data.id);
+            if (entry && entry.element) {
+              entry.element.style.left = `${data.x}px`;
+              entry.element.style.top = `${data.y}px`;
+            }
+          });
+        },
+        clearAll: function() {
+          activeBubbles.forEach((entry) => {
+            clearTimeout(entry.timeoutId);
+            entry.element.remove();
+          });
+          activeBubbles.clear();
+        }
+      };
+    })();
+
+
+    // --- Chat Log ---
+    window.ChatLog = (function() {
+      const chatLogPanel = document.getElementById('chat-log-panel');
+      const chatLogToggle = document.querySelector('.chat-log-toggle');
+      const chatLogEntries = chatLogPanel.querySelector('.chat-log-entries');
+      const chatLogEmpty = chatLogPanel.querySelector('.chat-log-empty');
+      const srAnnouncements = document.getElementById('sr-chat-announcements-log');
+
+      let isOpen = false;
+      const MAX_MESSAGES = 50;
+      let messagesCount = 0;
+      let lastFocusedElement = null;
+
+      function trapFocus() {
+        const focusableEls = chatLogPanel.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        const firstFocusableEl = chatLogEntries;
+        const lastFocusableEl = chatLogEntries;
+
+        if (document.activeElement === chatLogPanel || !chatLogPanel.contains(document.activeElement)) {
+          if (firstFocusableEl) firstFocusableEl.focus();
+        }
+        document.addEventListener('keydown', handleFocusKeydown);
+      }
+
+      function handleFocusKeydown(e) {
+        if (e.key === 'Tab') {
+          const focusableEls = chatLogPanel.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          const firstFocusableEl = focusableEls.length > 0 ? focusableEls[0] : null;
+          const lastFocusableEl = focusableEls.length > 0 ? focusableEls[focusableEls.length - 1] : null;
+
+          if (!firstFocusableEl || !lastFocusableEl) return;
+
+          if (e.shiftKey) { // Shift + Tab
+            if (document.activeElement === firstFocusableEl || document.activeElement === chatLogPanel) {
+              lastFocusableEl.focus();
+              e.preventDefault();
+            }
+          } else { // Tab
+            if (document.activeElement === lastFocusableEl) {
+              firstFocusableEl.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      }
+
+      function removeFocusTrap() {
+        document.removeEventListener('keydown', handleFocusKeydown);
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        } else {
+          chatLogToggle.focus();
+        }
+      }
+
+      chatLogToggle.addEventListener('click', window.ChatLog.toggle);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isOpen) {
+          e.preventDefault();
+          window.ChatLog.toggle();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (isOpen && !chatLogPanel.contains(e.target) && !chatLogToggle.contains(e.target)) {
+          window.ChatLog.toggle();
+        }
+      });
+
+
+      return {
+        add: function({ name, text, timestamp }) {
+          const entry = document.createElement('div');
+          entry.classList.add('chat-log-entry');
+
+          const header = document.createElement('div');
+          header.classList.add('header');
+
+          const nameSpan = document.createElement('span');
+          nameSpan.classList.add('name');
+          nameSpan.textContent = escapeHtml(name);
+          header.appendChild(nameSpan);
+
+          const timestampSpan = document.createElement('span');
+          timestampSpan.classList.add('timestamp');
+          timestampSpan.textContent = escapeHtml(timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          header.appendChild(timestampSpan);
+
+          const textP = document.createElement('p');
+          textP.classList.add('text');
+          textP.textContent = escapeHtml(text);
+
+          entry.appendChild(header);
+          entry.appendChild(textP);
+
+          if (messagesCount >= MAX_MESSAGES) {
+            chatLogEntries.removeChild(chatLogEntries.firstElementChild);
+          } else {
+            messagesCount++;
+          }
+
+          chatLogEntries.appendChild(entry);
+          chatLogEmpty.style.display = 'none';
+
+          requestAnimationFrame(() => {
+            entry.classList.add('is-new');
+          });
+
+          setTimeout(() => {
+            chatLogEntries.scrollTop = chatLogEntries.scrollHeight;
+          }, 0);
+
+          srAnnouncements.textContent = `New message from ${escapeHtml(name)}: ${escapeHtml(text.substring(0, 120))}`;
+          setTimeout(() => srAnnouncements.textContent = '', 100);
+        },
+
+        toggle: function() {
+          isOpen = !isOpen;
+          if (isOpen) {
+            lastFocusedElement = document.activeElement;
+            chatLogPanel.classList.add('is-open');
+            chatLogToggle.setAttribute('aria-expanded', 'true');
+            chatLogPanel.setAttribute('aria-modal', 'true');
+            chatLogEntries.setAttribute('tabindex', '0');
+            chatLogPanel.addEventListener('transitionend', () => {
+              if (isOpen) trapFocus();
+            }, { once: true });
+
+          } else {
+            chatLogPanel.classList.remove('is-open');
+            chatLogToggle.setAttribute('aria-expanded', 'false');
+            chatLogPanel.setAttribute('aria-modal', 'false');
+            chatLogEntries.setAttribute('tabindex', '-1');
+            removeFocusTrap();
+          }
+        },
+
+        get isOpen() {
+          return isOpen;
+        },
+
+        clear: function() {
+          chatLogEntries.innerHTML = '';
+          chatLogEntries.appendChild(chatLogEmpty);
+          chatLogEmpty.style.display = 'flex';
+          messagesCount = 0;
+        }
+      };
+    })();
+
+    // --- EmotePicker ---
+    window.EmotePicker = (function() {
+      const emotePickerOverlay = document.getElementById('emote-picker-overlay');
+      const emotePickerPanel = emotePickerOverlay.querySelector('.emote-picker-panel');
+      const emotePickerGrid = emotePickerPanel.querySelector('.emote-picker-grid');
+      const srAnnouncements = emotePickerPanel.querySelector('#sr-emote-announcements');
+
+      let pickerIsOpen = false;
+      let lastFocusedElement = null;
+
+      const emotes = [
+        { emoji: '👋', name: 'Wave' },
+        { emoji: '💃', name: 'Dance' },
+        { emoji: '👆', name: 'Point' },
+        { emoji: '👏', name: 'Clap' },
+        { emoji: '😂', name: 'Laugh' },
+        { emoji: '🪑', name: 'Sit' },
+        { emoji: '😴', name: 'Sleep' },
+        { emoji: '❤️', name: 'Heart' },
+        { emoji: '🙋', name: 'Bye' }
+      ];
+
+      function renderEmotes() {
+        emotePickerGrid.innerHTML = '';
+        emotes.forEach((emote, index) => {
+          const cell = document.createElement('button');
+          cell.classList.add('emote-picker-cell');
+          cell.setAttribute('role', 'gridcell');
+          cell.setAttribute('aria-label', `Emote: ${emote.name}`);
+          cell.setAttribute('tabindex', '0'); // Make focusable
+
+          const emojiSpan = document.createElement('span');
+          emojiSpan.classList.add('emoji');
+          emojiSpan.textContent = emote.emoji;
+          emojiSpan.setAttribute('aria-hidden', 'true'); // Emoji is decorative, label provides context
+
+          const labelSpan = document.createElement('span');
+          labelSpan.classList.add('label');
+          labelSpan.textContent = emote.name;
+
+          cell.appendChild(emojiSpan);
+          cell.appendChild(labelSpan);
+
+          cell.addEventListener('click', () => handleEmoteSelect(emote));
+          cell.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleEmoteSelect(emote);
+            }
+          });
+          emotePickerGrid.appendChild(cell);
+        });
+      }
+
+      function handleEmoteSelect(emote) {
+        document.dispatchEvent(new CustomEvent('emote:select', { detail: { emoji: emote.emoji, name: emote.name } }));
+        window.EmotePicker.close();
+      }
+
+      function trapFocus() {
+        const focusableEls = emotePickerPanel.querySelectorAll(
+          'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        const firstFocusableEl = focusableEls[0];
+        const lastFocusableEl = focusableEls[focusableEls.length - 1];
+
+        if (!firstFocusableEl) { // If no focusable elements, focus the panel itself
+          emotePickerPanel.focus();
+          return;
+        }
+
+        if (document.activeElement === emotePickerPanel || !emotePickerPanel.contains(document.activeElement)) {
+          firstFocusableEl.focus();
+        }
+
+        document.addEventListener('keydown', handleFocusKeydown);
+      }
+
+      function handleFocusKeydown(e) {
+        if (e.key === 'Tab' && pickerIsOpen) {
+          const focusableEls = emotePickerPanel.querySelectorAll(
+            'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          const firstFocusableEl = focusableEls[0];
+          const lastFocusableEl = focusableEls[focusableEls.length - 1];
+
+          if (e.shiftKey) { // Shift + Tab
+            if (document.activeElement === firstFocusableEl) {
+              lastFocusableEl.focus();
+              e.preventDefault();
+            }
+          } else { // Tab
+            if (document.activeElement === lastFocusableEl) {
+              firstFocusableEl.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      }
+
+      function removeFocusTrap() {
+        document.removeEventListener('keydown', handleFocusKeydown);
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        } else {
+          document.body.focus(); // Fallback focus
+        }
+      }
+
+      emotePickerOverlay.addEventListener('click', (e) => {
+        if (pickerIsOpen && !emotePickerPanel.contains(e.target)) {
+          window.EmotePicker.close();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && pickerIsOpen) {
+          e.preventDefault();
+          window.EmotePicker.close();
+        }
+      });
+
+      renderEmotes(); // Initial render
+
+      return {
+        open: function() {
+          if (pickerIsOpen) return;
+          pickerIsOpen = true;
+          lastFocusedElement = document.activeElement;
+          emotePickerOverlay.classList.add('is-open');
+          emotePickerPanel.setAttribute('aria-modal', 'true');
+          emotePickerPanel.setAttribute('tabindex', '-1'); // Make panel itself focusable for initial trap
+          srAnnouncements.textContent = 'Emote picker opened.';
+          setTimeout(() => srAnnouncements.textContent = '', 100);
+
+          emotePickerOverlay.addEventListener('transitionend', () => {
+            if (pickerIsOpen) {
+              emotePickerPanel.focus(); // Focus panel
+              trapFocus();
+            }
+          }, { once: true });
+        },
+        close: function() {
+          if (!pickerIsOpen) return;
+          pickerIsOpen = false;
+          emotePickerOverlay.classList.remove('is-open');
+          emotePickerPanel.setAttribute('aria-modal', 'false');
+          srAnnouncements.textContent = 'Emote picker closed.';
+          setTimeout(() => srAnnouncements.textContent = '', 100);
+          removeFocusTrap();
+        },
+        get isOpen() {
+          return pickerIsOpen;
+        }
+      };
+    })();
+
+    // --- PlayerList ---
+    window.PlayerList = (function() {
+      const playerListWrapper = document.getElementById('player-list-wrapper');
+      const playerListToggle = playerListWrapper.querySelector('.player-list-toggle');
+      const toggleBadge = playerListToggle.querySelector('#player-list-toggle-badge');
+      const playerListPanel = playerListWrapper.querySelector('#player-list-panel');
+      const playerListHeader = playerListPanel.querySelector('.player-list-header');
+      const playerCountSpan = playerListPanel.querySelector('#player-list-count');
+      const playerListEntries = playerListPanel.querySelector('.player-list-entries');
+
+      let panelIsOpen = false;
+      let listIsCollapsed = false;
+      let playersData = [];
+
+      function renderPlayers() {
+        playerListEntries.innerHTML = '';
+        if (playersData.length === 0) {
+          playerListPanel.style.display = 'none';
+          toggleBadge.classList.remove('visible');
+          toggleBadge.textContent = '0';
+          playerCountSpan.textContent = '0';
+          return;
+        }
+
+        playerListPanel.style.display = 'flex';
+        toggleBadge.classList.add('visible');
+        toggleBadge.textContent = playersData.length;
+        playerCountSpan.textContent = playersData.length;
+
+        playersData.forEach(player => {
+          const entry = document.createElement('div');
+          entry.classList.add('player-list-entry');
+          entry.setAttribute('role', 'listitem');
+
+          const dot = document.createElement('span');
+          dot.classList.add('status-dot', player.status);
+          dot.setAttribute('aria-label', player.status);
+          entry.appendChild(dot);
+
+          const name = document.createElement('span');
+          name.classList.add('name');
+          name.textContent = escapeHtml(player.name);
+          entry.appendChild(name);
+
+          if (player.isLocal) {
+            const badge = document.createElement('span');
+            badge.classList.add('you-badge');
+            badge.textContent = 'You';
+            entry.appendChild(badge);
+          }
+          playerListEntries.appendChild(entry);
+        });
+      }
+
+      function updatePanelVisibility() {
+        if (playersData.length === 0) {
+          playerListPanel.classList.remove('is-open');
+          playerListToggle.setAttribute('aria-expanded', 'false');
+          return;
+        }
+
+        if (panelIsOpen) {
+          playerListPanel.classList.add('is-open');
+          playerListToggle.setAttribute('aria-expanded', 'true');
+        } else {
+          playerListPanel.classList.remove('is-open');
+          playerListToggle.setAttribute('aria-expanded', 'false');
+        }
+        playerListPanel.classList.toggle('is-collapsed', listIsCollapsed);
+      }
+
+      playerListToggle.addEventListener('click', () => {
+        window.PlayerList.togglePanel();
+      });
+
+      playerListHeader.addEventListener('click', () => {
+        window.PlayerList.toggleList();
+      });
+
+      return {
+        setPlayers: function(players) {
+          playersData = players;
+          renderPlayers();
+          updatePanelVisibility();
+        },
+        togglePanel: function() {
+          panelIsOpen = !panelIsOpen;
+          updatePanelVisibility();
+        },
+        closePanel: function() {
+          panelIsOpen = false;
+          updatePanelVisibility();
+        },
+        toggleList: function() {
+          listIsCollapsed = !listIsCollapsed;
+          playerListPanel.classList.toggle('is-collapsed', listIsCollapsed);
+          playerListHeader.setAttribute('aria-expanded', !listIsCollapsed);
+        },
+        addPlayer: function(player) {
+          playersData.push(player);
+          renderPlayers();
+          if (playersData.length > 0 && !panelIsOpen) {
+            this.togglePanel(); // Auto-open if first player joins
+          }
+        },
+        removePlayer: function(name) {
+          playersData = playersData.filter(p => p.name !== name);
+          renderPlayers();
+          if (playersData.length === 0) {
+            this.closePanel(); // Auto-close if no players left
+          }
+        },
+        updatePlayerStatus: function(name, status) {
+          const player = playersData.find(p => p.name === name);
+          if (player) {
+            player.status = status;
+            renderPlayers();
+          }
+        },
+        get isOpen() {
+          return panelIsOpen;
+        },
+        get isVisible() {
+          return panelIsOpen && playersData.length > 0;
+        }
+      };
+    })();
+
+    // --- SettingsPanel ---
+    window.SettingsPanel = (function() {
+      const settingsBackdrop = document.getElementById('settings-backdrop');
+      const settingsPanel = settingsBackdrop.querySelector('.settings-panel');
+      const closeButton = settingsBackdrop.querySelector('.settings-close-button');
+      const masterVolume = settingsBackdrop.querySelector('#master-volume');
+      const muteToggle = settingsBackdrop.querySelector('#mute-toggle');
+      const qualityDropdown = settingsBackdrop.querySelector('#quality-dropdown');
+      const fpsToggle = settingsBackdrop.querySelector('#fps-toggle');
+
+      let panelIsOpen = false;
+      let lastFocusedElement = null;
+
+      function trapFocus() {
+        const focusableEls = settingsPanel.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        const firstFocusableEl = focusableEls[0];
+        const lastFocusableEl = focusableEls[focusableEls.length - 1];
+
+        if (!firstFocusableEl) { // If no focusable elements, focus the panel itself
+          settingsPanel.focus();
+          return;
+        }
+
+        if (document.activeElement === settingsPanel || !settingsPanel.contains(document.activeElement)) {
+          firstFocusableEl.focus();
+        }
+
+        document.addEventListener('keydown', handleFocusKeydown);
+      }
+
+      function handleFocusKeydown(e) {
+        if (e.key === 'Tab' && panelIsOpen) {
+          const focusableEls = settingsPanel.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          const firstFocusableEl = focusableEls[0];
+          const lastFocusableEl = focusableEls[focusableEls.length - 1];
+
+          if (e.shiftKey) { // Shift + Tab
+            if (document.activeElement === firstFocusableEl) {
+              lastFocusableEl.focus();
+              e.preventDefault();
+            }
+          } else { // Tab
+            if (document.activeElement === lastFocusableEl) {
+              firstFocusableEl.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      }
+
+      function removeFocusTrap() {
+        document.removeEventListener('keydown', handleFocusKeydown);
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        } else {
+          document.body.focus();
+        }
+      }
+
+      closeButton.addEventListener('click', () => window.SettingsPanel.close());
+      settingsBackdrop.addEventListener('click', (e) => {
+        if (e.target === settingsBackdrop && panelIsOpen) {
+          window.SettingsPanel.close();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && panelIsOpen) {
+          e.preventDefault();
+          window.SettingsPanel.close();
+        }
+      });
+
+      // Event dispatchers
+      masterVolume.addEventListener('input', (e) => {
+        document.dispatchEvent(new CustomEvent('settings:volume', { detail: { value: parseInt(e.target.value, 10) } }));
+        masterVolume.setAttribute('aria-valuenow', e.target.value);
+      });
+      muteToggle.addEventListener('change', (e) => {
+        document.dispatchEvent(new CustomEvent('settings:mute', { detail: { muted: e.target.checked } }));
+        muteToggle.setAttribute('aria-checked', e.target.checked);
+      });
+      qualityDropdown.addEventListener('change', (e) => {
+        document.dispatchEvent(new CustomEvent('settings:quality', { detail: { level: e.target.value } }));
+      });
+      fpsToggle.addEventListener('change', (e) => {
+        document.dispatchEvent(new CustomEvent('settings:fps', { detail: { show: e.target.checked } }));
+        fpsToggle.setAttribute('aria-checked', e.target.checked);
+      });
+
+      return {
+        open: function() {
+          if (panelIsOpen) return;
+          panelIsOpen = true;
+          lastFocusedElement = document.activeElement;
+          settingsBackdrop.classList.add('is-open');
+          settingsPanel.setAttribute('aria-modal', 'true');
+          settingsBackdrop.addEventListener('transitionend', () => {
+            if (panelIsOpen) {
+              settingsPanel.focus();
+              trapFocus();
+            }
+          }, { once: true });
+        },
+        close: function() {
+          if (!panelIsOpen) return;
+          panelIsOpen = false;
+          settingsBackdrop.classList.remove('is-open');
+          settingsPanel.setAttribute('aria-modal', 'false');
+          removeFocusTrap();
+        },
+        toggle: function() {
+          if (panelIsOpen) this.close();
+          else this.open();
+        },
+        get isOpen() {
+          return panelIsOpen;
+        }
+      };
+    })();
+
+    // --- ErrorScreen ---
+    window.ErrorScreen = (function() {
+      const errorScreen = document.getElementById('error-screen');
+      const errorIcon = document.getElementById('error-icon');
+      const errorTitle = document.getElementById('error-title');
+      const errorMessage = document.getElementById('error-message');
+      const errorCountdown = document.getElementById('error-countdown');
+      const reconnectButton = document.getElementById('error-reconnect-button');
+      const backToMenuButton = document.getElementById('error-back-to-menu-button');
+
+      let currentCountdownInterval = null;
+      let panelIsOpen = false;
+      let lastFocusedElement = null;
+
+      const ERROR_TYPES = {
+        disconnect: { icon: '⚠️', title: 'Connection Lost', message: 'You have been disconnected from the server.', countdown: 10 },
+        timeout: { icon: '⏰', title: 'Connection Timed Out', message: 'The server took too long to respond.', countdown: 10 },
+        error: { icon: '❌', title: 'Something Went Wrong', message: 'An unexpected error occurred. Please try again.', countdown: 0 },
+        kicked: { icon: '🚫', title: 'Kicked', message: 'You have been removed from the server.', countdown: 0 }
+      };
+
+      function startCountdown(seconds) {
+        if (currentCountdownInterval) clearInterval(currentCountdownInterval);
+        if (seconds <= 0) {
+          errorCountdown.textContent = '';
+          return;
+        }
+
+        let count = seconds;
+        errorCountdown.textContent = `Auto-reconnecting in ${count}...`;
+        currentCountdownInterval = setInterval(() => {
+          count--;
+          errorCountdown.textContent = `Auto-reconnecting in ${count}...`;
+          if (count <= 0) {
+            clearInterval(currentCountdownInterval);
+            errorCountdown.textContent = 'Reconnecting...';
+            document.dispatchEvent(new CustomEvent('error:reconnect'));
+          }
+        }, 1000);
+      }
+
+      function trapFocus() {
+        const focusableEls = errorScreen.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        const firstFocusableEl = reconnectButton; // Always focus reconnect first
+        const lastFocusableEl = backToMenuButton;
+
+        if (document.activeElement === errorScreen || !errorScreen.contains(document.activeElement)) {
+          if (firstFocusableEl) firstFocusableEl.focus();
+        }
+
+        document.addEventListener('keydown', handleFocusKeydown);
+      }
+
+      function handleFocusKeydown(e) {
+        if (e.key === 'Tab' && panelIsOpen) {
+          const focusableEls = errorScreen.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          );
+          const firstFocusableEl = focusableEls[0];
+          const lastFocusableEl = focusableEls[focusableEls.length - 1];
+
+          if (e.shiftKey) { // Shift + Tab
+            if (document.activeElement === firstFocusableEl) {
+              lastFocusableEl.focus();
+              e.preventDefault();
+            }
+          } else { // Tab
+            if (document.activeElement === lastFocusableEl) {
+              firstFocusableEl.focus();
+              e.preventDefault();
+            }
+          }
+        }
+      }
+
+      function removeFocusTrap() {
+        document.removeEventListener('keydown', handleFocusKeydown);
+        if (lastFocusedElement) {
+          lastFocusedElement.focus();
+          lastFocusedElement = null;
+        } else {
+          document.body.focus();
+        }
+      }
+
+      reconnectButton.addEventListener('click', () => {
+        document.dispatchEvent(new CustomEvent('error:reconnect'));
+      });
+
+      backToMenuButton.addEventListener('click', () => {
+        // In a real game, this would load a main menu. For prototype, just hide.
+        window.ErrorScreen.hide();
+        console.log('Back to Menu clicked - error dismissed.');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && panelIsOpen) {
+          e.preventDefault(); // ESC does nothing on error screen
+        }
+      });
+
+
+      return {
+        show: function({ type = 'error', message, countdown }) {
+          if (panelIsOpen) return;
+          panelIsOpen = true;
+          lastFocusedElement = document.activeElement;
+
+          const errorInfo = ERROR_TYPES[type] || ERROR_TYPES.error;
+          errorIcon.textContent = errorInfo.icon;
+          errorIcon.className = `icon type-${type}`; // Update icon color class
+          errorTitle.textContent = errorInfo.title;
+          errorMessage.textContent = message || errorInfo.message;
+
+          const finalCountdown = countdown !== undefined ? countdown : errorInfo.countdown;
+          startCountdown(finalCountdown);
+
+          errorScreen.classList.add('is-visible');
+          errorScreen.setAttribute('aria-label', errorInfo.title);
+          reconnectButton.focus(); // Auto-focus reconnect button
+
+          errorScreen.addEventListener('transitionend', () => {
+            if (panelIsOpen) trapFocus();
+          }, { once: true });
+        },
+        hide: function() {
+          if (!panelIsOpen) return;
+          panelIsOpen = false;
+          if (currentCountdownInterval) clearInterval(currentCountdownInterval);
+          errorScreen.classList.remove('is-visible');
+          document.dispatchEvent(new CustomEvent('error:dismiss'));
+          removeFocusTrap();
+        },
+        updateCountdown: function(n) {
+          if (currentCountdownInterval) clearInterval(currentCountdownInterval);
+          startCountdown(n);
+        }
+      };
+    })();
+
+    // === MAIN PROTOTYPE LOGIC ===
+    (function() {
+      const worldArea = document.getElementById('world-area');
+      const simJoinButton = document.getElementById('sim-join');
+      const simChatButton = document.getElementById('sim-chat');
+      const simEmoteButton = document.getElementById('sim-emote');
+      const simSettingsButton = document.getElementById('sim-settings');
+      const simErrorButton = document.getElementById('sim-error');
+      const simLeaveButton = document.getElementById('sim-leave');
+      const autoSimulateToggle = document.getElementById('auto-simulate-toggle');
+
+      let gamePlayers = []; // { id, name, status, isLocal, x, y }
+      let localPlayerId = 'player-bravefox';
+      let autoSimIntervalId = null;
+      let currentPhase = 'LOADING';
+
+      const playerNames = ['BraveFox', 'MightyWhale', 'ShyPanda', 'CalmOwl', 'WiseDragon', 'SwiftWolf'];
+      const chatMessages = [
+        "Hey everyone!", "Anyone seen the crystal cave?", "Need some help over here!",
+        "This planet is amazing!", "Found a new resource node!", "Good game, folks!",
+        "Having a blast!", "Beware of the ancient ruins...", "Let's team up!"
+      ];
+
+      // --- Nameplate Management (inlined as per spec) ---
+      function createNameplate(player) {
+        const nameplate = document.createElement('div');
+        nameplate.classList.add('nameplate');
+        nameplate.setAttribute('data-player-id', player.id);
+        nameplate.setAttribute('data-player-name', player.name);
+        nameplate.style.left = `${player.x}%`;
+        nameplate.style.top = `${player.y}%`;
+        nameplate.classList.add(player.scale);
+
+        const dot = document.createElement('span');
+        dot.classList.add('status-dot', player.status);
+        dot.setAttribute('aria-label', `Status: ${player.status}`);
+        nameplate.appendChild(dot);
+
+        const name = document.createElement('span');
+        name.classList.add('player-name');
+        name.textContent = escapeHtml(player.name);
+        nameplate.appendChild(name);
+
+        if (player.isLocal) {
+          const badge = document.createElement('span');
+          badge.classList.add('you-badge');
+          badge.textContent = 'You';
+          nameplate.appendChild(badge);
+        }
+
+        nameplate.addEventListener('click', () => {
+          if (currentPhase === 'EXPLORE' || currentPhase === 'CHAT') {
+            const simulatedMessage = `${player.name} says: ${chatMessages[Math.floor(Math.random() * chatMessages.length)]}`;
+            window.ChatLog.add({ name: player.name, text: simulatedMessage, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })});
+            window.ChatBubbles.showMessage({ senderId: player.id, name: player.name, text: simulatedMessage, x: player.x, y: player.y });
+          }
+        });
+        worldArea.appendChild(nameplate);
+        return nameplate;
+      }
+
+      function updateNameplate(player) {
+        const nameplate = worldArea.querySelector(`.nameplate[data-player-id="${player.id}"]`);
+        if (nameplate) {
+          nameplate.querySelector('.status-dot').className = `status-dot ${player.status}`;
+          nameplate.querySelector('.player-name').textContent = escapeHtml(player.name);
+          nameplate.style.left = `${player.x}%`;
+          nameplate.style.top = `${player.y}%`;
+          nameplate.classList.remove('scale-sm', 'scale-md', 'scale-lg');
+          nameplate.classList.add(player.scale);
+
+          // Update You badge if local status changes
+          const existingBadge = nameplate.querySelector('.you-badge');
+          if (player.isLocal && !existingBadge) {
+            const badge = document.createElement('span');
+            badge.classList.add('you-badge');
+            badge.textContent = 'You';
+            nameplate.appendChild(badge);
+          } else if (!player.isLocal && existingBadge) {
+            existingBadge.remove();
+          }
+        }
+      }
+
+      function removeNameplate(playerId) {
+        const nameplate = worldArea.querySelector(`.nameplate[data-player-id="${playerId}"]`);
+        if (nameplate) {
+          nameplate.classList.add('hidden'); // Fade out effect
+          nameplate.addEventListener('transitionend', () => nameplate.remove(), { once: true });
+        }
+      }
+
+
+      // --- Game State & Simulation Logic ---
+      function getPlayerPosition(playerNum) {
+        const positions = [
+          { x: 50, y: 70, scale: 'scale-md' }, // Center (BraveFox)
+          { x: 25, y: 30, scale: 'scale-sm' }, // Upper left (MightyWhale)
+          { x: 75, y: 80, scale: 'scale-lg' }, // Lower right (ShyPanda)
+          { x: 40, y: 15, scale: 'scale-sm' }, // Further up (CalmOwl)
+          { x: 60, y: 50, scale: 'scale-md' }, // Mid-right (WiseDragon)
+          { x: 15, y: 60, scale: 'scale-lg' }  // Lower left (SwiftWolf)
+        ];
+        return positions[playerNum % positions.length];
+      }
+
+      function addSimulatedPlayer(name, status = 'online', isLocal = false) {
+        const nextPlayerIndex = gamePlayers.length;
+        const pos = getPlayerPosition(nextPlayerIndex);
+        const newPlayer = {
+          id: `player-${name.toLowerCase()}`,
+          name: name,
+          status: status,
+          isLocal: isLocal,
+          x: pos.x,
+          y: pos.y,
+          scale: pos.scale
+        };
+        gamePlayers.push(newPlayer);
+        createNameplate(newPlayer);
+        window.PlayerList.setPlayers(gamePlayers.map(p => ({ name: p.name, status: p.status, isLocal: p.isLocal })));
+        window.HUD.setPlayerCount(gamePlayers.length);
+      }
+
+      function removeSimulatedPlayer(name) {
+        const playerToRemove = gamePlayers.find(p => p.name === name);
+        if (!playerToRemove) return;
+
+        gamePlayers = gamePlayers.filter(p => p.name !== name);
+        removeNameplate(playerToRemove.id);
+        window.PlayerList.setPlayers(gamePlayers.map(p => ({ name: p.name, status: p.status, isLocal: p.isLocal })));
+        window.HUD.setPlayerCount(gamePlayers.length);
+      }
+
+      function simulateChatFromRandomPlayer() {
+        if (gamePlayers.length < 1) return;
+        const sender = gamePlayers[Math.floor(Math.random() * gamePlayers.length)];
+        const message = chatMessages[Math.floor(Math.random() * chatMessages.length)];
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        window.ChatLog.add({ name: sender.name, text: message, timestamp: timestamp });
+        window.ChatBubbles.showMessage({ senderId: sender.id, name: sender.name, text: message, x: sender.x, y: sender.y });
+        window.Notifications.show({ type: 'system', text: `${sender.name} said: "${message.substring(0, 30)}..."` });
+      }
+
+      function simulateEmoteReaction(name) {
+        const player = gamePlayers.find(p => p.name === name);
+        if (!player) return;
+        const emote = window.EmotePicker.emotes[Math.floor(Math.random() * window.EmotePicker.emotes.length)];
+        window.ChatLog.add({ name: player.name, text: `Emote: ${emote.name} ${emote.emoji}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })});
+        window.ChatBubbles.showMessage({ senderId: player.id, name: player.name, text: emote.emoji, x: player.x, y: player.y });
+      }
+
+
+      // --- Phase Control ---
+      function setPhase(phase) {
+        currentPhase = phase;
+        console.log(`--- PHASE: ${phase} ---`);
+        document.body.setAttribute('data-phase', phase);
+      }
+
+      // Automated Timeline
+      async function startTimeline() {
+        // Phase 1: LOADING (0-4s)
+        setPhase('LOADING');
+        window.LoadingScreen.show();
+        let progress = 0;
+        const loadingSteps = [
+          { status: "Loading terrain...", progress: 30, delay: 800 },
+          { status: "Loading models...", progress: 60, delay: 1000 },
+          { status: "Spawning NPCs...", progress: 90, delay: 1200 },
+          { status: "Connecting...", progress: 95, delay: 500 },
+          { status: "Ready!", progress: 100, delay: 500 }
+        ];
+
+        for (const step of loadingSteps) {
+          await new Promise(resolve => setTimeout(resolve, step.delay));
+          window.LoadingScreen.setProgress(step.progress);
+          window.LoadingScreen.setStatus(step.status);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 800)); // Give time for 100% to display
+        window.LoadingScreen.hide();
+
+        // Phase 2: EXPLORE (4s onward)
+        setPhase('EXPLORE');
+        window.HUD.init();
+        window.HUD.setConnectionQuality('good');
+        window.PlayerList.setPlayers([]); // Initialize empty list
+        window.ChatLog.clear();
+        window.ChatBubbles.clearAll();
+        window.Notifications.clear();
+
+        // Initial players
+        addSimulatedPlayer('BraveFox', 'online', true);
+        addSimulatedPlayer('MightyWhale', 'online');
+        addSimulatedPlayer('ShyPanda', 'away');
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        window.PlayerList.togglePanel(); // Open player list automatically
+
+
+        // Auto-simulation loop
+        if (autoSimulateToggle.checked) {
+          startAutoSimulation();
+        }
+      }
+
+      function startAutoSimulation() {
+        if (autoSimIntervalId) clearInterval(autoSimIntervalId);
+        let simCount = 0;
+        autoSimIntervalId = setInterval(() => {
+          simCount++;
+          if (simCount % 3 === 0 && gamePlayers.length < 5) {
+            // Simulate Join
+            simJoinButton.click();
+          } else if (simCount % 2 === 0) {
+            // Simulate Chat
+            simChatButton.click();
+          } else if (simCount % 5 === 0) {
+            // Simulate Emote
+            // Simulating emote interaction by opening the picker for the user to select
+            simEmoteButton.click();
+            // If we wanted a fully automated emote, we'd pick one and dispatch `emote:select` here
+          }
+        }, 5000); // Every 5 seconds
+      }
+
+      function stopAutoSimulation() {
+        if (autoSimIntervalId) {
+          clearInterval(autoSimIntervalId);
+          autoSimIntervalId = null;
+        }
+      }
+
+      autoSimulateToggle.addEventListener('change', () => {
+        if (autoSimulateToggle.checked) {
+          startAutoSimulation();
+        } else {
+          stopAutoSimulation();
+        }
+      });
+
+
+      // --- Control Button Actions ---
+      simJoinButton.addEventListener('click', () => {
+        setPhase('PLAYER JOINS');
+        const availableNames = playerNames.filter(name => !gamePlayers.some(p => p.name === name));
+        if (availableNames.length > 0) {
+          const newPlayerName = availableNames[0];
+          addSimulatedPlayer(newPlayerName, 'online');
+          window.Notifications.show({ type: 'join', text: `🎮 ${newPlayerName} joined the world` });
+        } else {
+          window.Notifications.show({ type: 'system', text: 'No more players to join!' });
+        }
+      });
+
+      simChatButton.addEventListener('click', () => {
+        setPhase('CHAT');
+        simulateChatFromRandomPlayer();
+      });
+
+      simEmoteButton.addEventListener('click', () => {
+        setPhase('EMOTE');
+        window.EmotePicker.open();
+        // Simulate another player reacting when picker opens
+        if (gamePlayers.length > 1) {
+          const otherPlayer = gamePlayers.find(p => !p.isLocal);
+          if (otherPlayer) {
+            setTimeout(() => simulateEmoteReaction(otherPlayer.name), 1000);
+          }
+        }
+      });
+      document.addEventListener('emote:select', (e) => {
+        window.Notifications.show({ type: 'achievement', text: `You ${e.detail.name.toLowerCase()}d! ${e.detail.emoji}` });
+        const local = gamePlayers.find(p => p.isLocal);
+        if (local) {
+            window.ChatLog.add({ name: local.name, text: `Emote: ${e.detail.name} ${e.detail.emoji}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })});
+            window.ChatBubbles.showMessage({ senderId: local.id, name: local.name, text: e.detail.emoji, x: local.x, y: local.y });
+        }
+      });
+
+
+      simSettingsButton.addEventListener('click', () => {
+        setPhase('SETTINGS');
+        window.SettingsPanel.open();
+      });
+      document.addEventListener('settings:volume', (e) => console.log('Settings: Volume changed to', e.detail.value));
+      document.addEventListener('settings:mute', (e) => console.log('Settings: Mute toggled', e.detail.muted));
+      document.addEventListener('settings:quality', (e) => console.log('Settings: Quality changed to', e.detail.level));
+      document.addEventListener('settings:fps', (e) => {
+        console.log('Settings: Show FPS toggled', e.detail.show);
+        if (e.detail.show) window.HUD.setFPS(60); // Fake FPS if enabled
+        else window.HUD.setFPS(''); // Hide or disable FPS
+      });
+
+
+      simErrorButton.addEventListener('click', () => {
+        setPhase('ERROR');
+        const errorTypes = ['disconnect', 'timeout', 'error', 'kicked'];
+        const randomType = errorTypes[Math.floor(Math.random() * errorTypes.length)];
+        let message = '';
+        if (randomType === 'error') message = 'Failed to load a critical game asset.';
+        if (randomType === 'kicked') message = 'You violated server rules.';
+
+        window.ErrorScreen.show({ type: randomType, message: message });
+      });
+      document.addEventListener('error:reconnect', () => {
+        window.ErrorScreen.hide();
+        window.Notifications.show({ type: 'system', text: 'Reconnected to the server!' });
+        console.log('Error: Reconnect event caught by prototype.');
+        setPhase('EXPLORE'); // Return to explore state
+      });
+
+      simLeaveButton.addEventListener('click', () => {
+        setPhase('DISCONNECT');
+        if (gamePlayers.length > 1) {
+          const playerToLeave = gamePlayers.find(p => !p.isLocal); // Random non-local player
+          if (playerToLeave) {
+            removeSimulatedPlayer(playerToLeave.name);
+            window.Notifications.show({ type: 'leave', text: `${playerToLeave.name} left the world` });
+          }
+        } else if (gamePlayers.length === 1 && gamePlayers[0].isLocal) {
+          window.Notifications.show({ type: 'system', text: 'You are the last player. Leaving...' });
+          removeSimulatedPlayer(localPlayerId); // Local player leaves
+        } else {
+            window.Notifications.show({ type: 'system', text: 'No players to leave!' });
+        }
+      });
+
+      document.addEventListener('chat:send', (e) => {
+        const localPlayer = gamePlayers.find(p => p.isLocal);
+        if (localPlayer) {
+          const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          window.ChatLog.add({ name: localPlayer.name, text: e.detail.message, timestamp: timestamp });
+          window.ChatBubbles.showMessage({ senderId: localPlayer.id, name: localPlayer.name, text: e.detail.message, x: localPlayer.x, y: localPlayer.y });
+          window.Notifications.show({ type: 'system', text: `You said: "${e.detail.message.substring(0, 30)}..."` });
+        }
+      });
+
+
+      // --- Initial Load ---
+      startTimeline();
+    })();
+  </script>
+</body>
+</html>

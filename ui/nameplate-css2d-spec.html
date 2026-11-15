@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planetwood — Nameplate CSS2DRenderer Spec</title>
+  <style>
+    :root {
+      --primary-green: #4e8c6d;
+      --dark-bg: #283436;
+      --surface: rgba(60, 72, 74, 0.9);
+      --surface-alpha: rgba(60, 72, 74, 0.7);
+      --white-text: #ffffff;
+      --muted-text: rgba(255, 255, 255, 0.6);
+      --accent-hover: #5da37d;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --radius: 8px;
+      --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'SF Mono', 'Fira Code', ui-monospace, Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--dark-bg);
+      color: var(--white-text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .spec-container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 64px 0 40px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 48px;
+    }
+    .hero-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--primary-green);
+      margin-bottom: 12px;
+    }
+    .hero h1 {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .hero p {
+      font-size: 16px;
+      color: var(--muted-text);
+      max-width: 640px;
+      line-height: 1.6;
+    }
+
+    /* ── Section headings ── */
+    .section { margin-bottom: 56px; }
+    .section-num {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--primary-green);
+      margin-bottom: 8px;
+    }
+    .section h2 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin-bottom: 12px;
+    }
+    .section h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 28px;
+      margin-bottom: 8px;
+      color: var(--white-text);
+    }
+    .section p {
+      font-size: 15px;
+      color: var(--muted-text);
+      margin-bottom: 16px;
+      max-width: 68ch;
+    }
+
+    /* ── Code blocks ── */
+    .code-block {
+      position: relative;
+      background: #1a2426;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .code-block pre {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      color: #c8d6e5;
+      white-space: pre;
+      margin: 0;
+    }
+    .code-lang {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted-text);
+      pointer-events: none;
+    }
+    .kw { color: #c792ea; }
+    .fn { color: #82aaff; }
+    .str { color: #c3e88d; }
+    .cm { color: #546e7a; }
+    .num { color: #f78c6c; }
+    .op { color: #89ddff; }
+    .prop { color: #f07178; }
+    .cls { color: #ffcb6b; }
+
+    /* ── Tables ── */
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      margin: 16px 0;
+    }
+    .spec-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--border-color);
+      color: var(--muted-text);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .spec-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: top;
+    }
+    .spec-table code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: rgba(78, 140, 109, 0.15);
+      color: var(--primary-green);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Diagram containers ── */
+    .diagram {
+      background: #1a2426;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+    .diagram svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* ── 3D Demo ── */
+    .demo-wrapper {
+      position: relative;
+      background: #1a2426;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+    .demo-canvas-container {
+      position: relative;
+      width: 100%;
+      height: 420px;
+    }
+    .demo-canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .demo-controls {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-color);
+      flex-wrap: wrap;
+    }
+    .demo-btn {
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--surface);
+      color: var(--white-text);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .demo-btn:hover {
+      background: var(--primary-green);
+      border-color: var(--primary-green);
+    }
+    .demo-btn.active {
+      background: var(--primary-green);
+      border-color: var(--primary-green);
+    }
+    .demo-hint {
+      font-size: 11px;
+      color: var(--muted-text);
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* ── CSS2D overlay nameplates inside demo ── */
+    .pw-nameplate {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      background: var(--surface-alpha);
+      backdrop-filter: blur(4px);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      white-space: nowrap;
+      user-select: none;
+      pointer-events: auto;
+      cursor: default;
+      transition: opacity 0.2s;
+    }
+    .pw-nameplate .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .pw-nameplate .status-dot.online { background: var(--primary-green); box-shadow: 0 0 8px rgba(78,140,109,0.7); }
+    .pw-nameplate .status-dot.away { background: #f39c12; box-shadow: 0 0 8px rgba(243,156,18,0.5); }
+    .pw-nameplate .status-dot.offline { background: #c0392b; box-shadow: 0 0 8px rgba(192,57,43,0.5); }
+    .pw-nameplate .player-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--white-text);
+      letter-spacing: 0.02em;
+    }
+    .pw-nameplate .you-badge {
+      background: var(--primary-green);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 10px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Chat bubble (CSS2D overlay) ── */
+    .pw-chat-bubble {
+      background: var(--surface-alpha);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      max-width: 220px;
+      white-space: normal;
+      user-select: none;
+      pointer-events: auto;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .pw-chat-bubble.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .pw-chat-bubble .bubble-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--primary-green);
+      margin-bottom: 2px;
+    }
+    .pw-chat-bubble .bubble-text {
+      font-size: 13px;
+      color: var(--white-text);
+      line-height: 1.4;
+    }
+
+    /* ── Layer diagram ── */
+    .layer-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      width: 100%;
+      max-width: 480px;
+    }
+    .layer-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border: 1px solid var(--border-color);
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .layer-item:first-child { border-radius: 8px 8px 0 0; }
+    .layer-item:last-child { border-radius: 0 0 8px 8px; }
+    .layer-item:hover { background: rgba(78,140,109,0.08); }
+    .layer-z {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--primary-green);
+      min-width: 48px;
+    }
+    .layer-label { flex: 1; }
+    .layer-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* ── Callout / tip box ── */
+    .callout {
+      background: rgba(78, 140, 109, 0.08);
+      border-left: 3px solid var(--primary-green);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 14px;
+      color: var(--muted-text);
+    }
+    .callout strong { color: var(--white-text); }
+
+    /* ── Inline code ── */
+    code.inline {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: rgba(78, 140, 109, 0.12);
+      color: var(--primary-green);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Troubleshooting table ── */
+    .trouble-grid {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .trouble-card {
+      background: #1a2426;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .trouble-card h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--white-text);
+    }
+    .trouble-card .cause {
+      font-size: 13px;
+      color: var(--muted-text);
+      margin-bottom: 4px;
+    }
+    .trouble-card .fix {
+      font-size: 13px;
+      color: var(--primary-green);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .spec-container { padding: 0 16px 60px; }
+      .hero { padding: 40px 0 28px; }
+      .demo-canvas-container { height: 300px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="spec-container">
+
+  <!-- ════════════════ HERO ════════════════ -->
+  <header class="hero">
+    <div class="hero-label">Technical Spec — T020</div>
+    <h1>Nameplate CSS2DRenderer</h1>
+    <p>How player nameplates render in 3D space using Three.js CSS2DRenderer. Bridges the HTML/CSS nameplate component with in-world 3D rendering. Guides chat bubble rendering (T020) and nameplate positioning.</p>
+  </header>
+
+  <!-- ════════════════ 01 — INTERACTIVE DEMO ════════════════ -->
+  <section class="section" id="demo">
+    <div class="section-num">01 — Interactive Demo</div>
+    <h2>Live 3D Preview</h2>
+    <p>Click any avatar sphere to trigger a chat bubble. Drag to orbit. Scroll to zoom. Nameplates stay fixed-size on screen regardless of camera distance — that is the core CSS2DRenderer behavior.</p>
+
+    <div class="demo-wrapper">
+      <div class="demo-canvas-container" id="three-container"></div>
+      <div class="demo-controls">
+        <button class="demo-btn active" id="btn-orbit">Orbit</button>
+        <button class="demo-btn" id="btn-reset">Reset Camera</button>
+        <button class="demo-btn" id="btn-toggle-bubbles">Toggle Bubbles</button>
+        <span class="demo-hint">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          Click avatar to show chat
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ 02 — CSS2DRenderer SETUP ════════════════ -->
+  <section class="section" id="setup">
+    <div class="section-num">02 — CSS2DRenderer Setup</div>
+    <h2>Integration Guide</h2>
+    <p>CSS2DRenderer creates a second DOM layer on top of the WebGL canvas. HTML elements positioned via CSS2DObject appear at 3D world coordinates but render at fixed pixel size — no perspective scaling, no lighting.</p>
+
+    <h3>Import (Three.js r185)</h3>
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">import</span> { <span class="cls">CSS2DRenderer</span>, <span class="cls">CSS2DObject</span> } <span class="kw">from</span> <span class="str">'three/examples/jsm/renderers/CSS2DRenderer.js'</span>;</pre>
+    </div>
+
+    <h3>Renderer Initialization</h3>
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="cm">// Create CSS2DRenderer — must render on top of WebGL</span>
+<span class="kw">const</span> labelRenderer = <span class="kw">new</span> <span class="cls">CSS2DRenderer</span>();
+labelRenderer.<span class="fn">setSize</span>(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = <span class="str">'absolute'</span>;
+labelRenderer.domElement.style.top = <span class="str">'0'</span>;
+labelRenderer.domElement.style.left = <span class="str">'0'</span>;
+labelRenderer.domElement.style.pointerEvents = <span class="str">'none'</span>; <span class="cm">// click-through to game</span>
+document.<span class="fn">getElementById</span>(<span class="str">'game-container'</span>).<span class="fn">appendChild</span>(labelRenderer.domElement);
+
+<span class="cm">// In animate() loop — must render BOTH renderers</span>
+<span class="kw">function</span> <span class="fn">animate</span>() {
+  requestAnimationFrame(animate);
+  renderer.<span class="fn">render</span>(scene, camera);      <span class="cm">// WebGL</span>
+  labelRenderer.<span class="fn">render</span>(scene, camera); <span class="cm">// HTML overlays</span>
+}</pre>
+    </div>
+
+    <div class="callout">
+      <strong>Key constraint:</strong> <code class="inline">pointerEvents: none</code> is set on the container. Individual nameplate elements set <code class="inline">pointer-events: auto</code> when they need click interaction.
+    </div>
+  </section>
+
+  <!-- ════════════════ 03 — NAMEPLATE FACTORY ════════════════ -->
+  <section class="section" id="factory">
+    <div class="section-num">03 — Nameplate Factory</div>
+    <h2>createNameplate()</h2>
+    <p>Factory function that builds a DOM element matching the Planetwood nameplate design, wraps it in a CSS2DObject, and attaches it to an avatar's head bone position.</p>
+
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">function</span> <span class="fn">createNameplate</span>(player) {
+  <span class="kw">const</span> div = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  div.className = <span class="str">'pw-nameplate'</span>;
+  div.id = <span class="str">`nameplate-${</span>player.id<span class="str">}`</span>;
+  div.<span class="fn">setAttribute</span>(<span class="str">'role'</span>, <span class="str">'status'</span>);
+  div.<span class="fn">setAttribute</span>(<span class="str">'aria-label'</span>, <span class="str">`${</span>player.name<span class="str">} - ${</span>player.status<span class="str">}`</span>);
+
+  <span class="cm">// Status dot</span>
+  <span class="kw">const</span> dot = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  dot.className = <span class="str">`status-dot ${</span>player.status<span class="str">}`</span>;
+  div.<span class="fn">appendChild</span>(dot);
+
+  <span class="cm">// Player name</span>
+  <span class="kw">const</span> name = document.<span class="fn">createElement</span>(<span class="str">'span'</span>);
+  name.className = <span class="str">'player-name'</span>;
+  name.textContent = player.displayName;
+  div.<span class="fn">appendChild</span>(name);
+
+  <span class="cm">// "You" badge — only for local player</span>
+  <span class="kw">if</span> (player.isLocal) {
+    <span class="kw">const</span> badge = document.<span class="fn">createElement</span>(<span class="str">'span'</span>);
+    badge.className = <span class="str">'you-badge'</span>;
+    badge.textContent = <span class="str">'You'</span>;
+    div.<span class="fn">appendChild</span>(badge);
+  }
+
+  <span class="cm">// Wrap in CSS2DObject and attach to head bone</span>
+  <span class="kw">const</span> label = <span class="kw">new</span> <span class="cls">CSS2DObject</span>(div);
+  label.position.set(<span class="num">0</span>, headHeight, <span class="num">0</span>);
+
+  <span class="kw">return</span> label;
+}</pre>
+    </div>
+
+    <h3>HTML Structure</h3>
+    <div class="code-block">
+      <span class="code-lang">HTML</span>
+      <pre><span class="op">&lt;</span><span class="kw">div</span> <span class="prop">class</span>=<span class="str">"pw-nameplate"</span><span class="op">&gt;</span>
+  <span class="op">&lt;</span><span class="kw">div</span> <span class="prop">class</span>=<span class="str">"status-dot online"</span><span class="op">&gt;&lt;/</span><span class="kw">div</span><span class="op">&gt;</span>
+  <span class="op">&lt;</span><span class="kw">span</span> <span class="prop">class</span>=<span class="str">"player-name"</span><span class="op">&gt;</span>BraveFox<span class="op">&lt;/</span><span class="kw">span</span><span class="op">&gt;</span>
+  <span class="op">&lt;</span><span class="kw">span</span> <span class="prop">class</span>=<span class="str">"you-badge"</span><span class="op">&gt;</span>You<span class="op">&lt;/</span><span class="kw">span</span><span class="op">&gt;</span>
+<span class="op">&lt;/</span><span class="kw">div</span><span class="op">&gt;</span></pre>
+    </div>
+
+    <h3>CSS Reference</h3>
+    <div class="code-block">
+      <span class="code-lang">CSS</span>
+      <pre><span class="cls">.pw-nameplate</span> {
+  <span class="prop">display</span>: flex;
+  <span class="prop">align-items</span>: center;
+  <span class="prop">gap</span>: <span class="num">8px</span>;
+  <span class="prop">padding</span>: <span class="num">4px 8px</span>;
+  <span class="prop">border-radius</span>: <span class="num">8px</span>;
+  <span class="prop">background</span>: <span class="fn">rgba</span>(<span class="num">60</span>, <span class="num">72</span>, <span class="num">74</span>, <span class="num">0.7</span>);
+  <span class="prop">backdrop-filter</span>: <span class="fn">blur</span>(<span class="num">4px</span>);
+  <span class="prop">border</span>: <span class="num">1px</span> solid <span class="fn">rgba</span>(<span class="num">255</span>, <span class="num">255</span>, <span class="num">255</span>, <span class="num">0.1</span>);
+  <span class="prop">box-shadow</span>: <span class="num">0</span> <span class="num">4px</span> <span class="num">12px</span> <span class="fn">rgba</span>(<span class="num">0</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">0.3</span>);
+  <span class="prop">white-space</span>: nowrap;
+  <span class="prop">user-select</span>: none;
+  <span class="prop">pointer-events</span>: auto; <span class="cm">/* re-enable clicks per-element */</span>
+}</pre>
+    </div>
+  </section>
+
+  <!-- ════════════════ 04 — POSITIONING ════════════════ -->
+  <section class="section" id="positioning">
+    <div class="section-num">04 — Positioning &amp; Offsets</div>
+    <h2>Avatar Head Height Mapping</h2>
+    <p>Nameplates attach above the avatar's head bone. The offset varies by entity type. All values are in Three.js world units.</p>
+
+    <table class="spec-table">
+      <thead>
+        <tr><th>Entity</th><th>Head Bone Index</th><th>Offset Y</th><th>Scale</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Avatar (humanoid)</td><td><code>10</code></td><td><code>2.2</code></td><td><code>1.0</code></td></tr>
+        <tr><td>Rabbit NPC</td><td><code>5</code></td><td><code>1.0</code></td><td><code>0.7</code></td></tr>
+        <tr><td>Bird NPC</td><td><code>3</code></td><td><code>0.6</code></td><td><code>0.5</code></td></tr>
+        <tr><td>Butterfly NPC</td><td><code>2</code></td><td><code>0.3</code></td><td><code>0.4</code></td></tr>
+        <tr><td>Bear NPC</td><td><code>8</code></td><td><code>1.8</code></td><td><code>0.9</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Position Offset Diagram</h3>
+    <div class="diagram">
+      <svg width="400" height="320" viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Avatar body -->
+        <rect x="170" y="120" width="60" height="140" rx="8" fill="#3c484a" stroke="#4e8c6d" stroke-width="1.5"/>
+        <!-- Head -->
+        <circle cx="200" cy="100" r="30" fill="#3c484a" stroke="#4e8c6d" stroke-width="1.5"/>
+        <!-- Head bone marker -->
+        <circle cx="200" cy="85" r="4" fill="#4e8c6d"/>
+        <text x="212" y="88" fill="#4e8c6d" font-size="10" font-family="monospace">head bone</text>
+        <!-- Offset arrow -->
+        <line x1="240" y1="85" x2="240" y2="40" stroke="#f78c6c" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <polygon points="240,36 236,44 244,44" fill="#f78c6c"/>
+        <text x="250" y="65" fill="#f78c6c" font-size="11" font-family="monospace">+2.2u</text>
+        <!-- Nameplate -->
+        <rect x="140" y="20" width="120" height="28" rx="10" fill="rgba(60,72,74,0.85)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+        <circle cx="156" cy="34" r="4" fill="#4e8c6d"/>
+        <text x="168" y="38" fill="#fff" font-size="11" font-family="system-ui">BraveFox</text>
+        <rect x="216" y="29" width="30" height="14" rx="7" fill="#4e8c6d"/>
+        <text x="222" y="39" fill="#fff" font-size="9" font-weight="600" font-family="system-ui">You</text>
+        <!-- Scale indicator -->
+        <text x="20" y="300" fill="rgba(255,255,255,0.4)" font-size="11" font-family="monospace">scale: 1.0 (humanoid) / 0.4–0.9 (NPCs)</text>
+        <!-- Ground line -->
+        <line x1="120" y1="260" x2="280" y2="260" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+        <text x="155" y="276" fill="rgba(255,255,255,0.3)" font-size="10" font-family="monospace">ground</text>
+      </svg>
+    </div>
+
+    <h3>Billboard Behavior</h3>
+    <p>CSS2DRenderer automatically billboards elements — they always face the camera. No rotation interpolation needed. For optional depth perception, scale the nameplate based on camera distance:</p>
+
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">const</span> dist = camera.position.<span class="fn">distanceTo</span>(label.position);
+<span class="kw">const</span> scale = Math.<span class="fn">max</span>(<span class="num">0.5</span>, Math.<span class="fn">min</span>(<span class="num">1.5</span>, <span class="num">10</span> / dist));
+div.style.transform = <span class="str">`scale(${</span>scale<span class="str">})`</span>;</pre>
+    </div>
+  </section>
+
+  <!-- ════════════════ 05 — Z-ORDER ════════════════ -->
+  <section class="section" id="zorder">
+    <div class="section-num">05 — Z-Order &amp; Layering</div>
+    <h2>Depth Sorting</h2>
+    <p>CSS2DRenderer places elements in document order. Nameplates of closer players should appear on top. Sort before each render by distance to camera.</p>
+
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">function</span> <span class="fn">sortNameplates</span>(camera) {
+  <span class="kw">const</span> nameplates = playerNameplateGroup.children;
+  nameplates.<span class="fn">sort</span>((a, b) <span class="op">=></span> {
+    <span class="kw">const</span> distA = camera.position.<span class="fn">distanceTo</span>(a.position);
+    <span class="kw">const</span> distB = camera.position.<span class="fn">distanceTo</span>(b.position);
+    <span class="kw">return</span> distB - distA; <span class="cm">// farthest first, closest last (on top)</span>
+  });
+  nameplates.<span class="fn">forEach</span>((np, i) <span class="op">=></span> {
+    np.element.style.zIndex = i;
+  });
+}</pre>
+    </div>
+
+    <h3>Layer Order (back to front)</h3>
+    <div class="layer-stack">
+      <div class="layer-item">
+        <span class="layer-z">z: 0</span>
+        <span class="layer-label">WebGL scene</span>
+        <span class="layer-color" style="background: #1a2426;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 1</span>
+        <span class="layer-label">CSS2DRenderer container</span>
+        <span class="layer-color" style="background: #3c484a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 150</span>
+        <span class="layer-label">HUD</span>
+        <span class="layer-color" style="background: #4a5a5a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 300</span>
+        <span class="layer-label">Chat log</span>
+        <span class="layer-color" style="background: #5a6a6a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 400</span>
+        <span class="layer-label">Player list</span>
+        <span class="layer-color" style="background: #6a7a7a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 500</span>
+        <span class="layer-label">Emote picker</span>
+        <span class="layer-color" style="background: #7a8a8a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 600</span>
+        <span class="layer-label">Settings panel</span>
+        <span class="layer-color" style="background: #8a9a9a;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 10000</span>
+        <span class="layer-label">Error screen</span>
+        <span class="layer-color" style="background: #c0392b;"></span>
+      </div>
+      <div class="layer-item">
+        <span class="layer-z">z: 20000</span>
+        <span class="layer-label">Loading screen</span>
+        <span class="layer-color" style="background: #4e8c6d;"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ 06 — CHAT BUBBLES ════════════════ -->
+  <section class="section" id="chatbubbles">
+    <div class="section-num">06 — Chat Bubble Integration (T020)</div>
+    <h2>Chat Bubble Rendering</h2>
+    <p>Chat bubbles are CSS2DObjects positioned above nameplates. They appear when a player sends a message and auto-remove after 5 seconds.</p>
+
+    <h3>Factory Function</h3>
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">function</span> <span class="fn">createChatBubble</span>(senderId, senderName, text) {
+  <span class="kw">const</span> div = document.<span class="fn">createElement</span>(<span class="str">'div'</span>);
+  div.className = <span class="str">'pw-chat-bubble'</span>;
+  div.innerHTML = <span class="str">`
+    &lt;div class="bubble-name"&gt;${<span class="fn">escapeHtml</span>(senderName)}&lt;/div&gt;
+    &lt;div class="bubble-text"&gt;${<span class="fn">escapeHtml</span>(text)}&lt;/div&gt;
+  `</span>;
+
+  <span class="kw">const</span> bubble = <span class="kw">new</span> <span class="cls">CSS2DObject</span>(div);
+  <span class="cm">// Position above nameplate</span>
+  bubble.position.set(<span class="num">0</span>, headHeight + <span class="num">0.8</span>, <span class="num">0</span>);
+
+  <span class="kw">return</span> bubble;
+}</pre>
+    </div>
+
+    <h3>Lifecycle</h3>
+    <div class="diagram">
+      <svg width="520" height="80" viewBox="0 0 520 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Show -->
+        <rect x="0" y="20" width="100" height="40" rx="8" fill="rgba(78,140,109,0.15)" stroke="#4e8c6d" stroke-width="1"/>
+        <text x="50" y="44" text-anchor="middle" fill="#4e8c6d" font-size="12" font-weight="600" font-family="system-ui">Show</text>
+        <text x="50" y="58" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="monospace">0→1 / 200ms</text>
+        <!-- Arrow -->
+        <line x1="108" y1="40" x2="140" y2="40" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+        <polygon points="140,36 148,40 140,44" fill="rgba(255,255,255,0.2)"/>
+        <!-- Display -->
+        <rect x="152" y="20" width="120" height="40" rx="8" fill="rgba(60,72,74,0.5)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+        <text x="212" y="44" text-anchor="middle" fill="#fff" font-size="12" font-weight="600" font-family="system-ui">Display</text>
+        <text x="212" y="58" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="monospace">5 seconds</text>
+        <!-- Arrow -->
+        <line x1="280" y1="40" x2="312" y2="40" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+        <polygon points="312,36 320,40 312,44" fill="rgba(255,255,255,0.2)"/>
+        <!-- Fade -->
+        <rect x="324" y="20" width="90" height="40" rx="8" fill="rgba(192,57,43,0.12)" stroke="rgba(192,57,43,0.4)" stroke-width="1"/>
+        <text x="369" y="44" text-anchor="middle" fill="rgba(192,57,43,0.8)" font-size="12" font-weight="600" font-family="system-ui">Fade</text>
+        <text x="369" y="58" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="monospace">1→0 / 300ms</text>
+        <!-- Arrow -->
+        <line x1="422" y1="40" x2="442" y2="40" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+        <polygon points="442,36 450,40 442,44" fill="rgba(255,255,255,0.2)"/>
+        <!-- Remove -->
+        <rect x="454" y="20" width="66" height="40" rx="8" fill="rgba(192,57,43,0.08)" stroke="rgba(192,57,43,0.25)" stroke-width="1"/>
+        <text x="487" y="44" text-anchor="middle" fill="rgba(255,255,255,0.5)" font-size="12" font-weight="600" font-family="system-ui">Remove</text>
+        <text x="487" y="58" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9" font-family="monospace">DOM cleanup</text>
+      </svg>
+    </div>
+
+    <h3>Position Math</h3>
+    <table class="spec-table">
+      <thead>
+        <tr><th>Element</th><th>Y Position</th><th>Note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Nameplate</td><td><code>avatar.y + headHeightOffset</code></td><td>Per entity table above</td></tr>
+        <tr><td>Chat bubble</td><td><code>avatar.y + headHeightOffset + 0.8</code></td><td>0.8u above nameplate</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Z-Sorting Rule</h3>
+    <p>Bubbles sort above their own nameplate. When a bubble exists, its z-index is set to the parent nameplate's z-index + 1.</p>
+  </section>
+
+  <!-- ════════════════ 07 — STATE MANAGEMENT ════════════════ -->
+  <section class="section" id="state">
+    <div class="section-num">07 — State Management</div>
+    <h2>NameplateManager</h2>
+    <p>Manages the lifecycle of all nameplates. Handles add, remove, position updates, and status changes. Owns the <code class="inline">THREE.Group</code> that holds all CSS2DObjects.</p>
+
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">class</span> <span class="cls">NameplateManager</span> {
+  <span class="fn">constructor</span>(scene) {
+    <span class="kw">this</span>.nameplates = <span class="kw">new</span> <span class="cls">Map</span>(); <span class="cm">// playerId → CSS2DObject</span>
+    <span class="kw">this</span>.group = <span class="kw">new</span> THREE.<span class="cls">Group</span>();
+    <span class="kw">this</span>.group.name = <span class="str">'nameplates'</span>;
+    scene.<span class="fn">add</span>(<span class="kw">this</span>.group);
+  }
+
+  <span class="fn">addPlayer</span>(player) {
+    <span class="kw">const</span> label = <span class="fn">createNameplate</span>(player);
+    <span class="kw">this</span>.nameplates.<span class="fn">set</span>(player.id, label);
+    <span class="kw">this</span>.group.<span class="fn">add</span>(label);
+  }
+
+  <span class="fn">removePlayer</span>(playerId) {
+    <span class="kw">const</span> label = <span class="kw">this</span>.nameplates.<span class="fn">get</span>(playerId);
+    <span class="kw">if</span> (label) {
+      <span class="kw">this</span>.group.<span class="fn">remove</span>(label);
+      label.element.<span class="fn">remove</span>(); <span class="cm">// clean up DOM</span>
+      <span class="kw">this</span>.nameplates.<span class="fn">delete</span>(playerId);
+    }
+  }
+
+  <span class="fn">updatePosition</span>(playerId, position, headHeight) {
+    <span class="kw">const</span> label = <span class="kw">this</span>.nameplates.<span class="fn">get</span>(playerId);
+    <span class="kw">if</span> (label) {
+      label.position.<span class="fn">copy</span>(position);
+      label.position.y += headHeight;
+    }
+  }
+
+  <span class="fn">updateStatus</span>(playerId, status) {
+    <span class="kw">const</span> label = <span class="kw">this</span>.nameplates.<span class="fn">get</span>(playerId);
+    <span class="kw">if</span> (label) {
+      <span class="kw">const</span> dot = label.element.<span class="fn">querySelector</span>(<span class="str">'.status-dot'</span>);
+      dot.className = <span class="str">`status-dot ${</span>status<span class="str">}`</span>;
+    }
+  }
+
+  <span class="fn">sortByDistance</span>(camera) {
+    <span class="kw">const</span> items = <span class="cls">Array</span>.<span class="kw">from</span>(<span class="kw">this</span>.nameplates.values());
+    items.<span class="fn">sort</span>((a, b) <span class="op">=></span> {
+      <span class="kw">const</span> da = camera.position.<span class="fn">distanceTo</span>(a.position);
+      <span class="kw">const</span> db = camera.position.<span class="fn">distanceTo</span>(b.position);
+      <span class="kw">return</span> db - da;
+    });
+    items.<span class="fn">forEach</span>((np, i) <span class="op">=></span> { np.element.style.zIndex = i; });
+  }
+}</pre>
+    </div>
+
+    <h3>ChatBubbleManager</h3>
+    <div class="code-block">
+      <span class="code-lang">JavaScript</span>
+      <pre><span class="kw">class</span> <span class="cls">ChatBubbleManager</span> {
+  <span class="fn">constructor</span>(scene) {
+    <span class="kw">this</span>.bubbles = <span class="kw">new</span> <span class="cls">Map</span>(); <span class="cm">// playerId → { bubble, timeoutId }</span>
+    <span class="kw">this</span>.group = <span class="kw">new</span> THREE.<span class="cls">Group</span>();
+    <span class="kw">this</span>.group.name = <span class="str">'chat-bubbles'</span>;
+    scene.<span class="fn">add</span>(<span class="kw">this</span>.group);
+  }
+
+  <span class="fn">showMessage</span>(senderId, senderName, text, position, headHeight) {
+    <span class="kw">this</span>.<span class="fn">removeBubble</span>(senderId);
+
+    <span class="kw">const</span> bubble = <span class="fn">createChatBubble</span>(senderId, senderName, text);
+    bubble.position.<span class="fn">set</span>(position.x, position.y + headHeight + <span class="num">0.8</span>, position.z);
+    <span class="kw">this</span>.group.<span class="fn">add</span>(bubble);
+
+    <span class="cm">// Trigger fade-in after DOM attachment</span>
+    requestAnimationFrame(() <span class="op">=></span> {
+      bubble.element.classList.<span class="fn">add</span>(<span class="str">'visible'</span>);
+    });
+
+    <span class="cm">// Auto-remove after 5 seconds</span>
+    <span class="kw">const</span> timeoutId = <span class="fn">setTimeout</span>(() <span class="op">=></span> <span class="kw">this</span>.<span class="fn">removeBubble</span>(senderId), <span class="num">5000</span>);
+    <span class="kw">this</span>.bubbles.<span class="fn">set</span>(senderId, { bubble, timeoutId });
+  }
+
+  <span class="fn">removeBubble</span>(playerId) {
+    <span class="kw">const</span> existing = <span class="kw">this</span>.bubbles.<span class="fn">get</span>(playerId);
+    <span class="kw">if</span> (existing) {
+      <span class="fn">clearTimeout</span>(existing.timeoutId);
+      <span class="kw">this</span>.group.<span class="fn">remove</span>(existing.bubble);
+      existing.bubble.element.<span class="fn">remove</span>();
+      <span class="kw">this</span>.bubbles.<span class="fn">delete</span>(playerId);
+    }
+  }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ════════════════ 08 — PERFORMANCE ════════════════ -->
+  <section class="section" id="performance">
+    <div class="section-num">08 — Performance</div>
+    <h2>Considerations</h2>
+
+    <table class="spec-table">
+      <thead>
+        <tr><th>Concern</th><th>Detail</th><th>Mitigation</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>DOM count</td>
+          <td>CSS2DRenderer creates real DOM nodes</td>
+          <td>10 nameplates + 10 bubbles = ~20 nodes. Fine for Planetwood's 10-player cap.</td>
+        </tr>
+        <tr>
+          <td>Memory</td>
+          <td>Orphaned elements accumulate</td>
+          <td>Call <code>removePlayer()</code> on disconnect. DOM nodes + event listeners freed.</td>
+        </tr>
+        <tr>
+          <td>Layout thrashing</td>
+          <td>Reading offsetHeight forces reflow</td>
+          <td>Batch DOM reads/writes via <code>requestAnimationFrame</code>. Use <code>transform</code> not <code>top/left</code>.</td>
+        </tr>
+        <tr>
+          <td>reducedMotion</td>
+          <td>Fade animations cause motion sickness</td>
+          <td><code>@media (prefers-reduced-motion: reduce)</code> — skip fades, show/hide instantly.</td>
+        </tr>
+        <tr>
+          <td>renderOrder</td>
+          <td>Overlay draw order relative to WebGL</td>
+          <td><code>label.renderOrder = 1</code> ensures always on top of meshes.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <span class="code-lang">CSS</span>
+      <pre><span class="cm">/* Respect reduced motion preference */</span>
+<span class="kw">@media</span> (prefers-reduced-motion: reduce) {
+  <span class="cls">.pw-chat-bubble</span> {
+    <span class="prop">transition</span>: none;
+  }
+  <span class="cls">.pw-chat-bubble.visible</span> {
+    <span class="prop">opacity</span>: <span class="num">1</span>;
+    <span class="prop">transform</span>: none;
+  }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ════════════════ 09 — TROUBLESHOOTING ════════════════ -->
+  <section class="section" id="troubleshooting">
+    <div class="section-num">09 — Troubleshooting</div>
+    <h2>Common Issues</h2>
+
+    <div class="trouble-grid">
+      <div class="trouble-card">
+        <h4>Nameplate not showing</h4>
+        <div class="cause">Cause: <code class="inline">labelRenderer.render()</code> not in animate loop</div>
+        <div class="fix">Fix: Add <code class="inline">labelRenderer.render(scene, camera)</code> to your <code class="inline">animate()</code> function</div>
+      </div>
+      <div class="trouble-card">
+        <h4>Nameplate behind WebGL</h4>
+        <div class="cause">Cause: CSS2DRenderer DOM element z-index too low</div>
+        <div class="fix">Fix: Set <code class="inline">labelRenderer.domElement.style.zIndex = '1'</code></div>
+      </div>
+      <div class="trouble-card">
+        <h4>Click events blocked</h4>
+        <div class="cause">Cause: <code class="inline">pointer-events: none</code> on the container blocks all interaction</div>
+        <div class="fix">Fix: Set <code class="inline">pointer-events: auto</code> on individual nameplate elements</div>
+      </div>
+      <div class="trouble-card">
+        <h4>Nameplate jitters</h4>
+        <div class="cause">Cause: Layout thrashing from forced reflow on every frame</div>
+        <div class="fix">Fix: Batch DOM reads/writes. Use <code class="inline">transform</code> instead of <code class="inline">top/left</code></div>
+      </div>
+      <div class="trouble-card">
+        <h4>Chat bubble cuts off</h4>
+        <div class="cause">Cause: <code class="inline">overflow: hidden</code> on CSS2DRenderer parent</div>
+        <div class="fix">Fix: Ensure parent has <code class="inline">overflow: visible</code></div>
+      </div>
+      <div class="trouble-card">
+        <h4>Wrong position in VR</h4>
+        <div class="cause">Cause: CSS2DRenderer is not VR/XR-aware</div>
+        <div class="fix">Fix: Hide nameplates in VR mode, use sprite text instead</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════ 10 — INTEGRATION CHECKLIST ════════════════ -->
+  <section class="section" id="checklist">
+    <div class="section-num">10 — Integration Checklist</div>
+    <h2>Step-by-Step to Add Nameplates</h2>
+
+    <table class="spec-table">
+      <thead>
+        <tr><th>#</th><th>Step</th><th>File / Module</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Import <code>CSS2DRenderer</code> and <code>CSS2DObject</code></td><td>renderer setup</td></tr>
+        <tr><td>2</td><td>Create <code>CSS2DRenderer</code> instance, append to game container</td><td>renderer setup</td></tr>
+        <tr><td>3</td><td>Set <code>pointer-events: none</code> on label renderer DOM element</td><td>renderer setup</td></tr>
+        <tr><td>4</td><td>Add <code>labelRenderer.render(scene, camera)</code> to animate loop</td><td>game loop</td></tr>
+        <tr><td>5</td><td>Import <code>createNameplate</code> factory function</td><td>nameplate.js</td></tr>
+        <tr><td>6</td><td>Create <code>NameplateManager</code> instance with scene reference</td><td>nameplate.js</td></tr>
+        <tr><td>7</td><td>Call <code>nameplateManager.addPlayer()</code> on player join</td><td>network handler</td></tr>
+        <tr><td>8</td><td>Call <code>nameplateManager.updatePosition()</code> in animate loop</td><td>game loop</td></tr>
+        <tr><td>9</td><td>Call <code>nameplateManager.sortByDistance(camera)</code> before labelRenderer.render</td><td>game loop</td></tr>
+        <tr><td>10</td><td>Call <code>nameplateManager.removePlayer()</code> on disconnect</td><td>network handler</td></tr>
+        <tr><td>11</td><td>Add <code>pw-nameplate</code> CSS to global stylesheet</td><td>styles.css</td></tr>
+        <tr><td>12</td><td>Add <code>pw-chat-bubble</code> CSS with <code>reduced-motion</code> query</td><td>styles.css</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     THREE.JS INTERACTIVE DEMO
+     ═══════════════════════════════════════════════════════════ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.185.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.185.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const container = document.getElementById('three-container');
+const W = container.clientWidth;
+const H = container.clientHeight;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a2426);
+
+const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
+camera.position.set(0, 6, 14);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(W, H);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.left = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.target.set(0, 2, 0);
+controls.minDistance = 5;
+controls.maxDistance = 30;
+controls.maxPolarAngle = Math.PI * 0.48;
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 10, 5);
+scene.add(dirLight);
+
+const groundGeo = new THREE.PlaneGeometry(40, 40);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x2a3c3e, roughness: 0.9 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = 0;
+scene.add(ground);
+
+const gridHelper = new THREE.GridHelper(40, 40, 0x3a5050, 0x2a3c3e);
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+const players = [
+  { id: 'p1', name: 'BraveFox', status: 'online', isLocal: true, color: 0x4e8c6d, pos: [0, 1.2, 0], headH: 2.2 },
+  { id: 'p2', name: 'MightyWhale', status: 'online', isLocal: false, color: 0x5da37d, pos: [-4, 1.2, 2], headH: 2.2 },
+  { id: 'p3', name: 'ShyPanda', status: 'away', isLocal: false, color: 0xde794e, pos: [3, 1.2, -2], headH: 2.2 },
+  { id: 'p4', name: 'LuckyOwl', status: 'online', isLocal: false, color: 0x8cc5c0, pos: [5, 1.2, 3], headH: 2.2 },
+];
+
+const avatarGroup = new THREE.Group();
+scene.add(avatarGroup);
+
+const nameplateGroup = new THREE.Group();
+scene.add(nameplateGroup);
+
+const bubbleGroup = new THREE.Group();
+scene.add(bubbleGroup);
+
+const nameplateData = new Map();
+const bubbleData = new Map();
+let bubblesVisible = true;
+
+players.forEach(p => {
+  const bodyGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.6, 12);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.6 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.set(...p.pos);
+  body.position.y = 0.8;
+  body.userData = { playerId: p.id };
+  avatarGroup.add(body);
+
+  const headGeo = new THREE.SphereGeometry(0.45, 16, 16);
+  const head = new THREE.Mesh(headGeo, bodyMat);
+  head.position.set(p.pos[0], 2.0, p.pos[2]);
+  head.userData = { playerId: p.id };
+  avatarGroup.add(head);
+
+  const div = document.createElement('div');
+  div.className = 'pw-nameplate';
+  div.id = `nameplate-${p.id}`;
+  div.setAttribute('role', 'status');
+  div.setAttribute('aria-label', `${p.name} - ${p.status}`);
+  div.style.pointerEvents = 'auto';
+  div.style.cursor = 'pointer';
+
+  const dot = document.createElement('div');
+  dot.className = `status-dot ${p.status}`;
+  div.appendChild(dot);
+
+  const name = document.createElement('span');
+  name.className = 'player-name';
+  name.textContent = p.name;
+  div.appendChild(name);
+
+  if (p.isLocal) {
+    const badge = document.createElement('span');
+    badge.className = 'you-badge';
+    badge.textContent = 'You';
+    div.appendChild(badge);
+  }
+
+  const label = new CSS2DObject(div);
+  label.position.set(p.pos[0], p.pos[1] + p.headH, p.pos[2]);
+  label.renderOrder = 1;
+  nameplateGroup.add(label);
+
+  nameplateData.set(p.id, { label, div, headH: p.headH, pos: new THREE.Vector3(...p.pos) });
+
+  div.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!bubblesVisible) return;
+    toggleBubble(p.id, p.name);
+  });
+});
+
+function toggleBubble(id, name) {
+  if (bubbleData.has(id)) {
+    removeBubble(id);
+    return;
+  }
+  const msgs = [
+    'Hello world!',
+    'Anyone nearby?',
+    'Check out this view!',
+    'Delivering packages 📦',
+    'The planet looks great today',
+  ];
+  const text = msgs[Math.floor(Math.random() * msgs.length)];
+
+  const data = nameplateData.get(id);
+  const div = document.createElement('div');
+  div.className = 'pw-chat-bubble';
+  div.innerHTML = `<div class="bubble-name">${name}</div><div class="bubble-text">${text}</div>`;
+
+  const bubble = new CSS2DObject(div);
+  bubble.position.set(data.pos.x, data.pos.y + data.headH + 0.8, data.pos.z);
+  bubble.renderOrder = 2;
+  bubbleGroup.add(bubble);
+
+  requestAnimationFrame(() => div.classList.add('visible'));
+
+  const timeoutId = setTimeout(() => removeBubble(id), 5000);
+  bubbleData.set(id, { bubble, timeoutId, div });
+}
+
+function removeBubble(id) {
+  const existing = bubbleData.get(id);
+  if (existing) {
+    clearTimeout(existing.timeoutId);
+    bubbleGroup.remove(existing.bubble);
+    existing.div.remove();
+    bubbleData.delete(id);
+  }
+}
+
+function sortNameplates() {
+  const items = Array.from(nameplateGroup.children);
+  items.sort((a, b) => {
+    const da = camera.position.distanceTo(a.position);
+    const db = camera.position.distanceTo(b.position);
+    return db - da;
+  });
+  items.forEach((np, i) => { np.element.style.zIndex = 100 + i; });
+}
+
+document.getElementById('btn-orbit').addEventListener('click', () => {
+  controls.enabled = !controls.enabled;
+  document.getElementById('btn-orbit').classList.toggle('active', controls.enabled);
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  camera.position.set(0, 6, 14);
+  controls.target.set(0, 2, 0);
+  controls.update();
+});
+
+document.getElementById('btn-toggle-bubbles').addEventListener('click', () => {
+  bubblesVisible = !bubblesVisible;
+  document.getElementById('btn-toggle-bubbles').classList.toggle('active', bubblesVisible);
+  if (!bubblesVisible) {
+    bubbleData.forEach((_, id) => removeBubble(id));
+  }
+});
+
+function onResize() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+}
+window.addEventListener('resize', onResize);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  sortNameplates();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+</script>
+
+</body>
+</html>
