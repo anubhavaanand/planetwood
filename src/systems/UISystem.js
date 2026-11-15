@@ -20,14 +20,15 @@ export class UISystem {
     this.shopVisible = false;
     this.progressionSys = null; // set externally (coins, level, onCoinsChange)
     this.avatarCustomization = null; // set externally (purchase/equip)
+    // Daily reward UI state
     this.dailyRewardSys = null; // set externally (DailyRewardSystem)
     this.dailyRewardClaimBtn = null;
     this.dailyRewardVisible = false;
     this._setupChatInput();
     this._setupChatLog();
     this._setupEmotePanel();
-    this._setupShopUI();
     this._setupDailyRewardUI();
+    this._setupShopUI();
     this._setupTradeUI();
   }
 
@@ -388,6 +389,99 @@ export class UISystem {
     document.addEventListener('keydown', this._onEmoteKeyDown);
   }
 
+  // ============================ Daily Reward UI ============================
+
+  _setupDailyRewardUI() {
+    const container = document.createElement('div');
+    container.id = 'daily-reward-ui';
+    Object.assign(container.style, {
+      position: 'fixed', bottom: '20px', left: '20px',
+      width: '280px', zIndex: '310', display: 'none',
+      fontFamily: 'system-ui, sans-serif',
+    });
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: 'rgba(30,40,42,0.95)', border: '1px solid rgba(217, 147, 106, 0.5)',
+      borderRadius: '12px', padding: '16px', boxSizing: 'border-box',
+      backdropFilter: 'blur(8px)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+    });
+
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      marginBottom: '10px',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Daily Reward';
+    Object.assign(title.style, {
+      fontSize: '15px', fontWeight: '700', color: '#e8dccc',
+      minWidth: '110px', textAlign: 'right',
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    Object.assign(closeBtn.style, {
+      background: 'transparent', border: 'none', color: '#9ab0b4',
+      fontSize: '18px', cursor: 'pointer', lineHeight: '1',
+    });
+    closeBtn.addEventListener('click', () => this.hideDailyReward());
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    const streakInfo = document.createElement('div');
+    streakInfo.id = 'daily-streak-info';
+    Object.assign(streakInfo.style, {
+      fontSize: '13px', color: '#c8d4d8', marginBottom: '12px',
+    });
+    card.appendChild(streakInfo);
+
+    const rewardInfo = document.createElement('div');
+    rewardInfo.id = 'daily-reward-info';
+    Object.assign(rewardInfo.style, {
+      fontSize: '13px', color: '#fcd436', fontWeight: '700',
+      marginBottom: '14px', minHeight: '20px',
+    });
+    card.appendChild(rewardInfo);
+
+    const claimBtn = document.createElement('button');
+    claimBtn.id = 'daily-claim-btn';
+    claimBtn.textContent = 'Claim Daily Reward';
+    claimBtn.setAttribute('aria-label', 'Claim daily login reward');
+    Object.assign(claimBtn.style, {
+      width: '100%', padding: '10px 14px', borderRadius: '8px', border: 'none',
+      background: '#d9936a', color: '#1e282a', fontSize: '0.95rem',
+      fontWeight: '700', cursor: 'pointer', outline: 'none',
+    });
+    claimBtn.addEventListener('click', () => {
+      if (this.dailyRewardSys && this.dailyRewardSys.claimDailyReward) {
+        const result = this.dailyRewardSys.claimDailyReward(this.dailyRewardProgressionSys);
+        if (result) {
+          const parts = [];
+          if (result.coins > 0) parts.push(`${result.coins} coins`);
+          if (result.xp > 0) parts.push(`${result.xp} XP`);
+          if (result.specialItem) parts.push(`special item: ${result.specialItem}`);
+          this.addNotification(
+            `Daily reward claimed (streak ${result.streak}): ${parts.join(', ')}`
+          );
+          this._updateDailyRewardUI();
+          this.hideDailyReward();
+        } else {
+          this.addNotification('Daily reward already claimed today.');
+        }
+      }
+    });
+    card.appendChild(claimBtn);
+
+    container.appendChild(card);
+    document.body.appendChild(container);
+    this.dailyRewardClaimBtn = claimBtn;
+    this._dailyRewardElements = { streakInfo, rewardInfo };
+  }
+
   // ============================ Shop UI ============================
 
   _setupShopUI() {
@@ -406,7 +500,7 @@ export class UISystem {
       backdropFilter: 'blur(8px)',
     });
 
-    // Header: balance + level + close
+    // Header: title + balance + close
     const header = document.createElement('div');
     Object.assign(header.style, {
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -427,17 +521,17 @@ export class UISystem {
       minWidth: '110px', textAlign: 'right',
     });
 
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕';
-    Object.assign(closeBtn.style, {
+    const closeBtn2 = document.createElement('button');
+    closeBtn2.textContent = '✕';
+    Object.assign(closeBtn2.style, {
       background: 'transparent', border: 'none', color: '#9ab0b4',
       fontSize: '18px', cursor: 'pointer', lineHeight: '1',
     });
-    closeBtn.addEventListener('click', () => this.hideShop());
+    closeBtn2.addEventListener('click', () => this.hideShop());
 
     header.appendChild(title);
     header.appendChild(balanceBar);
-    header.appendChild(closeBtn);
+    header.appendChild(closeBtn2);
     card.appendChild(header);
 
     // Slots tabs
@@ -484,6 +578,65 @@ export class UISystem {
     this.shopContainer = container;
     this._shopElements = { balanceBar, itemsGrid, slotButtons };
     this._selectShopSlot('hair'); // default tab
+  }
+
+  /**
+   * Bind the daily reward system to the UI. progressionSys is used to grant
+   * coins/XP when claiming.
+   */
+  bindDailyReward(dailyRewardSys, progressionSys) {
+    this.dailyRewardSys = dailyRewardSys;
+    this.dailyRewardProgressionSys = progressionSys;
+    this._updateDailyRewardUI();
+  }
+
+  _updateDailyRewardUI() {
+    const sys = this.dailyRewardSys;
+    if (!sys || !this._dailyRewardElements) return;
+
+    const check = sys.checkDailyReward();
+    const { streakInfo, rewardInfo } = this._dailyRewardElements;
+    const btn = this.dailyRewardClaimBtn;
+
+    streakInfo.textContent = check.available
+      ? `Current streak: ${check.streak} day${check.streak !== 1 ? 's' : ''}`
+      : `Streak: ${check.streak} day${check.streak !== 1 ? 's' : ''} (claimed today)`;
+
+    if (check.available) {
+      const parts = [];
+      if (check.dayReward.coins > 0) parts.push(`${check.dayReward.coins} coins`);
+      if (check.dayReward.xp > 0) parts.push(`${check.dayReward.xp} XP`);
+      if (check.dayReward.specialItem) parts.push(`special item`);
+      rewardInfo.textContent = `Today (day ${check.potentialStreak}): ${parts.join(', ')}`;
+      btn.disabled = false;
+      btn.textContent = 'Claim Daily Reward';
+    } else {
+      rewardInfo.textContent = 'Come back tomorrow for the next daily reward.';
+      btn.disabled = true;
+      btn.textContent = 'Claimed today';
+    }
+  }
+
+  showDailyReward() {
+    if (!this.dailyRewardSys) return;
+    this.dailyRewardVisible = true;
+    this._updateDailyRewardUI();
+    const container = document.getElementById('daily-reward-ui');
+    if (container) container.style.display = '';
+  }
+
+  hideDailyReward() {
+    this.dailyRewardVisible = false;
+    const container = document.getElementById('daily-reward-ui');
+    if (container) container.style.display = 'none';
+  }
+
+  /**
+   * Show a "Daily reward available!" notification. Call once on login when a
+   * reward can be claimed.
+   */
+  notifyDailyRewardAvailable() {
+    this.addNotification('Daily reward available!');
   }
 
   /**
