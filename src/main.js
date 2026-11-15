@@ -18,6 +18,7 @@ import { DialogueSystem } from './systems/DialogueSystem.js';
 import { PlayerAvatar } from './entities/PlayerAvatar.js';
 import { NPC } from './entities/NPC.js';
 import { AvatarCustomizationSystem } from './systems/AvatarCustomizationSystem.js';
+import { DailyRewardSystem } from './systems/DailyRewardSystem.js';
 import { ProgressionSystem } from './systems/ProgressionSystem.js';
 import { QUESTS } from './data/quests.js';
 
@@ -49,6 +50,7 @@ let dialogueSys = null;
 let questSys = null;
 let fallbackTimer = null;
 let progressionSys = null;
+let dailyRewardSys = null;
 
 // Game flow state: 'loading' | 'title' | 'intro' | 'tutorial' | 'playing'
 let gameState = 'loading';
@@ -195,6 +197,13 @@ async function initCore() {
   progressionSys = new ProgressionSystem();
   progressionSys.load();
   questSys = new QuestSystem(questUI, progressionSys);
+
+  // Daily reward system — track login streak and grant escalating rewards.
+  dailyRewardSys = new DailyRewardSystem();
+  dailyRewardSys.load();
+
+  // Bind daily reward system to UI.
+  ui.bindDailyReward(dailyRewardSys, progressionSys);
 
   // Wire quest receipt/delivery events to the delivery item system.
   questSys.onItemReceived = (extraData, stepId, questId) => {
@@ -499,8 +508,10 @@ function showIntro() {
     box.remove();
     if (tutorialAlreadyDone) {
       gameState = 'playing';
+      _checkDailyRewardOnLogin();
     } else {
       gameState = 'tutorial';
+      _checkDailyRewardOnLogin();
       startTutorial();
     }
   };
@@ -532,6 +543,15 @@ function showIntro() {
  * tutorial dialogue. Movement is allowed during the tutorial so the player can
  * walk up to the highlighted NPC.
  */
+function _checkDailyRewardOnLogin() {
+  if (!dailyRewardSys || !ui) return;
+  const check = dailyRewardSys.checkDailyReward();
+  if (check.available) {
+    ui.notifyDailyRewardAvailable();
+    ui.showDailyReward();
+  }
+}
+
 function startTutorial() {
   if (!npcSys || npcSys.npcs.length === 0) {
     // No NPCs loaded yet — fall straight to playing.
@@ -642,6 +662,7 @@ function completeTutorial() {
   gameState = 'playing';
   ui.addNotification('Tutorial complete — happy delivering!');
   srAnnounce('Tutorial complete. Happy delivering!', 'polite');
+  _checkDailyRewardOnLogin();
 }
 
 /**
