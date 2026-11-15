@@ -31,7 +31,7 @@ export class DialogueSystem {
     this.choiceButtons = [];
     this.onNpcInteract = null; // (npc) => void, set by main to open dialogue
     this.onStepComplete = null; // (questId, stepId) => void
-    this.onStepChoice = null; // (questId, nextStepId) => void, for branch selection
+    this.onStepChoice = null; // (questId, nextStepId, branchTag) => void, for branch selection
 
     this._buildUI();
     this.close();
@@ -180,9 +180,10 @@ export class DialogueSystem {
   _selectChoice(choice) {
     this._clearChoices();
     if (choice.nextStep) {
-      // Notify main to resolve the next step via QuestSystem.selectNextStep
+      // Notify main to resolve the next step via QuestSystem.selectNextStep.
+      // Pass the choice tag so the quest system can apply branch consequences.
       if (this.onStepChoice && this.currentNpc) {
-        this.onStepChoice(this.currentNpc.questId, choice.nextStep);
+        this.onStepChoice(this.currentNpc.questId, choice.nextStep, choice.tag);
         return;
       }
     }
@@ -195,6 +196,32 @@ export class DialogueSystem {
 
   setNpcColors(npcType) {
     this.avatarFace.style.background = FACE_COLORS[npcType] || FACE_COLORS.default;
+  }
+
+  _renderText() {
+    if (!this.currentStep) return;
+    const text = this.currentStep.texts[this.textIndex] || '';
+    this.textEl.textContent = text;
+    this.continueBtn.style.display = '';
+    this._clearChoices();
+    if (this.currentStep.choices && this.textIndex === this.currentStep.texts.length - 1) {
+      this._showChoices(this.currentStep);
+    }
+  }
+
+  // Show an arbitrary text sequence (e.g. prestige dialogue) without
+  // advancing any quest step. onComplete fires when the sequence ends.
+  showTextSequence(npc, texts, onComplete) {
+    this.currentNpc = npc;
+    this.currentStep = { texts };
+    this.textIndex = 0;
+    this.showingChoices = false;
+    this.active = true;
+    this._onTextSequenceComplete = onComplete;
+    this.container.style.display = '';
+    this.container.style.pointerEvents = 'auto';
+    this.setNpcColors(npc.npcType);
+    this._renderText();
   }
 
   open(npc) {
@@ -236,6 +263,12 @@ export class DialogueSystem {
       this.onStepComplete(this.currentNpc.questId, this.currentStep.id);
     }
     this.close();
+    // Text-sequence (non-quest) dialogue — run its completion hook instead.
+    if (this._onTextSequenceComplete) {
+      const cb = this._onTextSequenceComplete;
+      this._onTextSequenceComplete = null;
+      cb();
+    }
   }
 
   _startStepForNpc() {
