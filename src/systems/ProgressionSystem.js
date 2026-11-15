@@ -23,6 +23,10 @@ export class ProgressionSystem {
     this.xpToNext = XP_PER_LEVEL;
     // Currency
     this.coins = 0;
+    // Stardust earned through prestige cycles
+    this.stardust = 0;
+    // Prestige level — unlocked after completing enough street quests per cycle
+    this.prestigeLevel = 0;
     // Delivery bag: items currently carried
     this.deliveryBag = []; // [{ itemId, npcType, displayName }]
     // Callbacks
@@ -40,6 +44,8 @@ export class ProgressionSystem {
       xp: 0,
       xpToNext: XP_PER_LEVEL,
       coins: 0,
+      stardust: 0,
+      prestigeLevel: 0,
     };
   }
 
@@ -54,6 +60,8 @@ export class ProgressionSystem {
         xp: this.xp,
         xpToNext: this.xpToNext,
         coins: this.coins,
+        stardust: this.stardust,
+        prestigeLevel: this.prestigeLevel,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
@@ -88,6 +96,8 @@ export class ProgressionSystem {
     this.xp = typeof state.xp === 'number' ? state.xp : 0;
     this.xpToNext = typeof state.xpToNext === 'number' ? state.xpToNext : XP_PER_LEVEL;
     this.coins = typeof state.coins === 'number' ? state.coins : 0;
+    this.stardust = typeof state.stardust === 'number' ? state.stardust : 0;
+    this.prestigeLevel = typeof state.prestigeLevel === 'number' ? state.prestigeLevel : 0;
 
     return state;
   }
@@ -168,18 +178,50 @@ export class ProgressionSystem {
     const rewardCoins = 25;
     const rewardRep = 10;
 
-    this.addXP(rewardXP);
-    this.addCoins(rewardCoins);
+    const multiplier = this.prestigeMultiplier();
+    const finalXP = Math.floor(rewardXP * multiplier);
+    const finalCoins = Math.floor(rewardCoins * multiplier);
+
+    this.addXP(finalXP);
+    this.addCoins(finalCoins);
     const tier = this.addReputation(npcType, rewardRep);
 
     return {
-      xp: rewardXP,
-      coins: rewardCoins,
+      xp: finalXP,
+      coins: finalCoins,
       reputation: rewardRep,
       npcType,
       tier,
       level: this.level,
       totalCoins: this.coins,
+      prestigeMultiplier: multiplier,
     };
+  }
+
+  // Return the quest XP/coin multiplier for the current prestige level.
+  // Each prestige adds +20% (1.0, 1.2, 1.4, ...). [PLACEHOLDER] tune after playtests.
+  prestigeMultiplier() {
+    return 1 + this.prestigeLevel * 0.2;
+  }
+
+  // Perform a prestige: increment prestige level, award stardust, reset the
+  // street-quest cycle counter via QuestSystem (called externally). Returns the
+  // new prestige state for UI notification.
+  prestige() {
+    this.prestigeLevel += 1;
+    const stardustAwarded = 10; // [PLACEHOLDER] tune after playtests
+    this.stardust += stardustAwarded;
+    this.save();
+    return {
+      prestigeLevel: this.prestigeLevel,
+      stardustAwarded,
+      totalStardust: this.stardust,
+      multiplier: this.prestigeMultiplier(),
+    };
+  }
+
+  addStardust(amount) {
+    this.stardust += amount;
+    this.save();
   }
 }
