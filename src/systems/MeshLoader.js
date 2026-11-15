@@ -20,6 +20,17 @@ export class MeshLoader {
     return promise;
   }
 
+  // Load a GLB model and resolve with the parsed GLTF. Cached by URL so the
+  // same delivery item is only fetched once across the session.
+  loadModel(url) {
+    if (this.cache.has(url)) return this.cache.get(url);
+    const promise = new Promise((resolve, reject) => {
+      gltfLoader.load(url, resolve, undefined, reject);
+    });
+    this.cache.set(url, promise);
+    return promise;
+  }
+
   // DRC meshes carry vertex data but no skinIndex/skinWeight, and the matching
   // .glb files also lack them in this asset set. A SkinnedMesh cannot bind
   // without skinning attributes, so fall back to a plain Mesh — the NPC still

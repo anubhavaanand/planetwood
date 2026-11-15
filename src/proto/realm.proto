@@ -10,4 +10,5 @@ message RealmData {
   string animationFiles = 7;  // avatar/animation-file(s)
   string tag = 8;             // display name
   string networkEvent = 9;    // emote/interaction event
+  repeated string carriedItems = 10; // delivery item modelIds currently carried
 }

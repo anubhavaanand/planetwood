@@ -62,6 +62,7 @@ export class MultiplayerSystem {
       animationFiles: ['avatar/avatar-idle', 'avatar/avatar-walk', 'avatar/avatar-run', 'avatar/avatar-air', 'avatar/avatar-afk'],
       tag: '',
       networkEvent: '',
+      carriedItems: [],
     };
     this._prevData = JSON.stringify(this._data);
 
@@ -96,6 +97,8 @@ export class MultiplayerSystem {
     this.onChatMessage = null;
     this.onEmote = null;
     this.onNotification = null;
+    this.onRemoteCarriedItemsChange = null; // (peerId, itemIds) => void
+    this.onTradeMessage = null; // (fromPeerId, type, payload) => void; type: 'offer'|'accept'|'reject'
     // Fired when the server restores a last-known position on rejoin: { p, r }.
     this.onRestoredPosition = null;
 
@@ -223,10 +226,16 @@ export class MultiplayerSystem {
         const keys = Object.keys(msg);
         const client = this.clients.get(localIdStr);
         if (client) {
+          const prevCarried = client.carriedItems;
           keys.forEach(k => {
             if (msg[k] instanceof Array && msg[k].length === 0) return;
             client[k] = msg[k];
           });
+          if (this.onRemoteCarriedItemsChange &&
+              msg.carriedItems !== undefined &&
+              (!prevCarried || JSON.stringify(prevCarried) !== JSON.stringify(client.carriedItems))) {
+            this.onRemoteCarriedItemsChange(localIdStr, client.carriedItems);
+          }
         } else {
           if (this.clients.size >= this.clientsLimit ||
               keys.reduce((h, d) => (msg[d] instanceof Array && msg[d].length === 0 ? h : h + 1), 0) !== this._protoMsgFields) {
@@ -285,6 +294,10 @@ export class MultiplayerSystem {
         this._onRoomJoined(this.roomRequested);
       } else if (json.data) {
         if (this.onChatMessage) this.onChatMessage(json.data);
+      } else if (json.type === 'trade') {
+        if (this.onTradeMessage) {
+          this.onTradeMessage(json.from || json.to, json.tradeType, json.payload || {});
+        }
       } else if (json.leave && typeof json.leave === 'string') {
         if (!this.clients.has(json.leave)) return;
         this.clients.delete(json.leave);
@@ -546,6 +559,14 @@ export class MultiplayerSystem {
         if (msg.medium !== undefined) client.medium = msg.medium;
         if (msg.tag !== undefined) client.tag = msg.tag;
         if (msg.networkEvent !== undefined) client.networkEvent = msg.networkEvent;
+        if (msg.carriedItems !== undefined) {
+          const prev = client.carriedItems;
+          client.carriedItems = msg.carriedItems;
+          if (this.onRemoteCarriedItemsChange &&
+              (!prev || JSON.stringify(prev) !== JSON.stringify(client.carriedItems))) {
+            this.onRemoteCarriedItemsChange(peerId, client.carriedItems);
+          }
+        }
       }
     } else if (msg.type === 'chat') {
       if (this.onChatMessage) {
@@ -604,6 +625,12 @@ export class MultiplayerSystem {
 
     this.scene.add(avatar.group);
     this.players.set(id, avatar);
+
+    // If the joining peer already carries items, notify so local rendering can
+    // show them immediately.
+    if (data.carriedItems && data.carriedItems.length > 0 && this.onRemoteCarriedItemsChange) {
+      this.onRemoteCarriedItemsChange(id, data.carriedItems);
+    }
 
     if (skinEntry) {
       const { bones, skeleton } = this.animSys.createSkin(skinEntry, 'avatar');
@@ -738,6 +765,33 @@ export class MultiplayerSystem {
       this._data.networkEvent = '';
       this._relay(true);
     }, 4000);
+  }
+
+  // Send a trade message to a specific peer via JSON WebSocket message.
+  // type: 'offer' | 'accept' | 'reject'
+  sendTrade(toPeerId, type, payload) {
+    if (!this.connected) return;
+    this._sendJson({
+      type: 'trade',
+      to: toPeerId,
+      tradeType: type,
+      payload: payload || {},
+      timestamp: Date.now(),
+    });
+  }
+
+  // Set the local player's carried delivery items (modelIds) and broadcast the
+  // change to all peers. Called by DeliveryItemSystem on receive/deliver/trade.
+  setCarriedItems(itemIds) {
+    this._data.carriedItems = Array.from(itemIds || []);
+    this._relay(true);
+  }
+
+  // Return the carried item modelIds for a remote player, or empty array.
+  getRemoteCarriedItems(peerId) {
+    const client = this.clients.get(peerId);
+    if (!client || !Array.isArray(client.carriedItems)) return [];
+    return client.carriedItems;
   }
 
   update(delta) {
