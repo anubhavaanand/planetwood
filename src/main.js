@@ -813,8 +813,6 @@ function srAnnounce(text, politeness = 'polite') {
   }
 }
 
-}
-
 /**
  * Open the trade UI with a remote player. Fetches both players' carried item
  * modelIds and shows the trade panel.

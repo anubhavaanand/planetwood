@@ -743,3 +743,5 @@ export class UISystem {
     btn.disabled = !(hasOffer && hasRequest);
     btn.style.opacity = btn.disabled ? '0.5' : '1';
   }
+
+}
