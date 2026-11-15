@@ -126,6 +126,9 @@ async function init() {
       loadingProgress.style.width = '0%';
       debugError(e);
     }
+    // Always show the title screen so the game is playable even if loading had issues.
+    loadingEl.style.display = 'none';
+    showTitle();
   }
 }
 
