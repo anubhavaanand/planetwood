@@ -171,9 +171,17 @@ async function initCore() {
 
     // Avatar customization system — mix-and-match accessories persisted to localStorage.
     avatarCustomization = new AvatarCustomizationSystem(playerAvatar, meshLoader, animSys, animData);
+    avatarCustomization.progressionSys = progressionSys;
     await avatarCustomization.load();
 
-    _setupCustomizationUI();
+    // When a player tries to equip a locked slot, show a notification naming the
+    // NPC tier needed and the slot.
+    avatarCustomization.onSlotLockRejected = (slot, req) => {
+      ui.addNotification(`Reach ${req.minTier} tier with an NPC to unlock ${slot}`);
+      srAnnounce(`Reach ${req.minTier} tier with an NPC to unlock ${slot}`, 'polite');
+    };
+
+    const customizationContainer = _setupCustomizationUI();
 
     sceneSys.scene.add(playerAvatar.group);
   }
@@ -331,6 +339,34 @@ async function initCore() {
   }
 
   ui.onTriggerEmote = triggerLocalEmote;
+
+  // ============================ Appearance button (opens customization panel) ============================
+  const appearanceBtn = document.createElement('button');
+  appearanceBtn.textContent = 'Appearance';
+  appearanceBtn.setAttribute('aria-label', 'Open avatar customization panel');
+  Object.assign(appearanceBtn.style, {
+    position: 'fixed', bottom: '20px', right: '170px',
+    width: '140px', zIndex: '310', display: 'none',
+    padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(217,147,106,0.3)',
+    background: 'rgba(60,72,74,0.9)', color: '#e8dccc', fontSize: '0.9rem',
+    cursor: 'pointer', outline: 'none', fontFamily: 'system-ui, sans-serif', fontWeight: '500',
+    backdropFilter: 'blur(4px)',
+  });
+  appearanceBtn.addEventListener('click', () => {
+    const isHidden = customizationContainer.style.display === 'none';
+    customizationContainer.style.display = isHidden ? '' : 'none';
+    appearanceBtn.textContent = isHidden ? 'Close Appearance' : 'Appearance';
+  });
+  document.body.appendChild(appearanceBtn);
+
+  const _updateAppearanceButtonVisibility = () => {
+    appearanceBtn.style.display = gameState === 'playing' ? '' : 'none';
+    if (gameState !== 'playing') {
+      customizationContainer.style.display = 'none';
+      appearanceBtn.textContent = 'Appearance';
+    }
+  };
+  ui._updateAppearanceButtonVisibility = _updateAppearanceButtonVisibility;
 
   // Shop button — opens/closes the avatar shop panel.
   const shopBtn = document.createElement('button');
@@ -528,8 +564,10 @@ function showIntro() {
     box.remove();
     if (tutorialAlreadyDone) {
       gameState = 'playing';
+      _updateAppearanceButtonVisibility();
     } else {
       gameState = 'tutorial';
+      _updateAppearanceButtonVisibility();
       startTutorial();
     }
   };
@@ -671,6 +709,7 @@ function completeTutorial() {
   gameState = 'playing';
   ui.addNotification('Tutorial complete — happy delivering!');
   srAnnounce('Tutorial complete. Happy delivering!', 'polite');
+  _updateAppearanceButtonVisibility();
 }
 
 /**
@@ -806,6 +845,54 @@ function _setupCustomizationUI() {
   ];
 
   const selects = {};
+  const lockIcons = {};
+  const equippedIndicators = {};
+
+  /**
+   * Update the equipped indicator (✓) for a slot based on current selection.
+   */
+  function _updateEquippedIndicator(key) {
+    const indicator = equippedIndicators[key];
+    const select = selects[key];
+    if (!indicator || !select) return;
+    indicator.textContent = select.value ? '✓' : '';
+  }
+
+  /**
+   * Refresh the lock state (icon + disabled select) of every customization slot
+   * based on current reputation. Call after reputation changes.
+   */
+  function _refreshCustomizationLocks() {
+    slots.forEach(({ key }) => {
+      const unlocked = avatarCustomization.isSlotUnlocked(key);
+      const req = avatarCustomization.getSlotRequirements(key);
+      const select = selects[key];
+      const lockIcon = lockIcons[key];
+      if (!select || !lockIcon) return;
+
+      if (unlocked) {
+        select.disabled = false;
+        lockIcon.textContent = '';
+        Object.assign(select.style, {
+          opacity: 1,
+          background: 'rgba(60,72,74,0.6)',
+          color: '#e8dccc',
+        });
+        lockIcon.title = '';
+      } else {
+        select.disabled = true;
+        lockIcon.textContent = '🔒';
+        Object.assign(select.style, {
+          opacity: 0.5,
+          background: 'rgba(60,72,74,0.3)',
+          color: '#9ab0b4',
+        });
+        lockIcon.title = `Locked — reach ${req.minTier} tier (${req.minRep} reputation)`;
+      }
+      _updateEquippedIndicator(key);
+    });
+  }
+
   slots.forEach(({ key, label, prefix, max }) => {
     const row = document.createElement('div');
     Object.assign(row.style, {
@@ -843,13 +930,28 @@ function _setupCustomizationUI() {
 
     select.addEventListener('change', async () => {
       await avatarCustomization.equip(key, select.value || null);
+      _updateEquippedIndicator(key);
       // announce only real changes
       if (select.value) ui.addNotification(`Equipped ${select.value}`);
     });
 
     selects[key] = select;
+    const lockIcon = document.createElement('span');
+    lockIcon.style.fontSize = '14px';
+    lockIcons[key] = lockIcon;
+
+    // Equipped indicator (✓ shown when this slot has an equipped item)
+    const indicator = document.createElement('span');
+    indicator.style.fontSize = '14px';
+    indicator.style.marginLeft = '4px';
+    indicator.style.minWidth = '16px';
+    indicator.style.textAlign = 'center';
+    equippedIndicators[key] = indicator;
+
     row.appendChild(labelEl);
+    row.appendChild(lockIcon);
     row.appendChild(select);
+    row.appendChild(indicator);
     card.appendChild(row);
   });
 
@@ -876,6 +978,11 @@ function _setupCustomizationUI() {
 
   // Expose so the avatar system can refresh selects if loaded asynchronously
   window._avatarCustomizationSelects = selects;
+
+  // Set initial lock state + equipped indicators.
+  _refreshCustomizationLocks();
+
+  return container;
 }
 
 function animate() {
