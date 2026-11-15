@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { SHOP_CATALOG, getShopItemsBySlot, SHOP_SLOTS, findShopItem } from '../data/shop.js';
 
 export class UISystem {
   constructor(scene, camera, renderer) {
@@ -14,19 +15,24 @@ export class UISystem {
     this.onTradeCancel = null; // () => void
     this.blockedPlayers = new Set();
     this.interactPrompts = new Map();
-    // Daily reward UI state
-    this.dailyRewardSys = null; // set externally (DailyRewardSystem)
-    this.dailyRewardClaimBtn = null;
-    this.dailyRewardVisible = false;
     // Trade UI state
     this.tradeContainer = null;
     this.tradeVisible = false;
     this._tradeElements = null;
     this._tradePeerId = null;
     this._tradeSelected = { offer: new Set(), request: new Set() };
+    // Shop UI state
+    this.shopContainer = null;
+    this.shopVisible = false;
+    this.progressionSys = null; // set externally (coins, level, onCoinsChange)
+    this.avatarCustomization = null; // set externally (purchase/equip)
+    this.dailyRewardSys = null; // set externally (DailyRewardSystem)
+    this.dailyRewardClaimBtn = null;
+    this.dailyRewardVisible = false;
     this._setupChatInput();
     this._setupChatLog();
     this._setupEmotePanel();
+    this._setupShopUI();
     this._setupDailyRewardUI();
     this._setupTradeUI();
   }
@@ -386,6 +392,261 @@ export class UISystem {
       if (e.key === '3') this.onTriggerEmote?.('look');
     };
     document.addEventListener('keydown', this._onEmoteKeyDown);
+  }
+
+  // ============================ Shop UI ============================
+
+  _setupShopUI() {
+    const container = document.createElement('div');
+    container.id = 'shop-ui';
+    Object.assign(container.style, {
+      position: 'fixed', top: '16px', right: '16px',
+      width: '340px', zIndex: '360', display: 'none',
+      fontFamily: 'system-ui, sans-serif',
+    });
+
+    const card = document.createElement('div');
+    Object.assign(card.style, {
+      background: 'rgba(30,40,42,0.95)', border: '1px solid rgba(217,147,106,0.5)',
+      borderRadius: '12px', padding: '16px', boxSizing: 'border-box',
+      backdropFilter: 'blur(8px)',
+    });
+
+    // Header: balance + level + close
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      marginBottom: '14px',
+    });
+
+    const title = document.createElement('div');
+    title.textContent = 'Avatar Shop';
+    Object.assign(title.style, {
+      fontSize: '16px', fontWeight: '700', color: '#e8dccc',
+      letterSpacing: '0.05em',
+    });
+
+    const balanceBar = document.createElement('div');
+    balanceBar.id = 'shop-balance';
+    Object.assign(balanceBar.style, {
+      fontSize: '13px', color: '#fcd436', fontWeight: '700',
+      minWidth: '110px', textAlign: 'right',
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    Object.assign(closeBtn.style, {
+      background: 'transparent', border: 'none', color: '#9ab0b4',
+      fontSize: '18px', cursor: 'pointer', lineHeight: '1',
+    });
+    closeBtn.addEventListener('click', () => this.hideShop());
+
+    header.appendChild(title);
+    header.appendChild(balanceBar);
+    header.appendChild(closeBtn);
+    card.appendChild(header);
+
+    // Slots tabs
+    const tabs = document.createElement('div');
+    Object.assign(tabs.style, {
+      display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap',
+    });
+    const slotButtons = {};
+    SHOP_SLOTS.forEach((slot) => {
+      const btn = document.createElement('button');
+      btn.textContent = slot.charAt(0).toUpperCase() + slot.slice(1);
+      Object.assign(btn.style, {
+        padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(217,147,106,0.3)',
+        background: 'rgba(60,72,74,0.6)', color: '#c8d4d8', fontSize: '12px',
+        cursor: 'pointer', outline: 'none',
+      });
+      btn.addEventListener('click', () => {
+        this._selectShopSlot(slot);
+        Object.values(slotButtons).forEach((b) => {
+          Object.assign(b.style, {
+            background: 'rgba(60,72,74,0.6)', color: '#c8d4d8',
+          });
+        });
+        Object.assign(btn.style, {
+          background: '#d9936a', color: '#1e282a',
+        });
+      });
+      slotButtons[slot] = btn;
+      tabs.appendChild(btn);
+    });
+    card.appendChild(tabs);
+
+    // Items grid
+    const itemsGrid = document.createElement('div');
+    itemsGrid.id = 'shop-items-grid';
+    Object.assign(itemsGrid.style, {
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px',
+      maxHeight: '420px', overflowY: 'auto',
+    });
+    card.appendChild(itemsGrid);
+
+    container.appendChild(card);
+    document.body.appendChild(container);
+    this.shopContainer = container;
+    this._shopElements = { balanceBar, itemsGrid, slotButtons };
+    this._selectShopSlot('hair'); // default tab
+  }
+
+  /**
+   * Bind the shop to progression + avatar systems. Called from main.js once
+   * both systems are constructed.
+   */
+  bindShop(progressionSys, avatarCustomization) {
+    this.progressionSys = progressionSys;
+    this.avatarCustomization = avatarCustomization;
+    if (progressionSys && progressionSys.onCoinsChange) {
+      const prev = progressionSys.onCoinsChange;
+      progressionSys.onCoinsChange = (coins) => {
+        if (prev) prev(coins);
+        this._updateShopBalance();
+        if (this.shopVisible) this._renderShopItems();
+      };
+    }
+    this._updateShopBalance();
+  }
+
+  showShop() {
+    if (!this.shopContainer) return;
+    this.shopVisible = true;
+    this.shopContainer.style.display = '';
+    this._updateShopBalance();
+    this._renderShopItems();
+  }
+
+  hideShop() {
+    if (!this.shopContainer) return;
+    this.shopVisible = false;
+    this.shopContainer.style.display = 'none';
+  }
+
+  toggleShop() {
+    if (this.shopVisible) this.hideShop(); else this.showShop();
+  }
+
+  _updateShopBalance() {
+    const bar = this._shopElements?.balanceBar;
+    if (!bar || !this.progressionSys) return;
+    bar.textContent = `Lvl ${this.progressionSys.level}  •  ${this.progressionSys.coins} coins`;
+  }
+
+  _selectShopSlot(slot) {
+    this._activeShopSlot = slot;
+    if (this.shopVisible) this._renderShopItems();
+  }
+
+  _renderShopItems() {
+    const grid = this._shopElements?.itemsGrid;
+    if (!grid || !this._activeShopSlot) return;
+    grid.innerHTML = '';
+    const items = getShopItemsBySlot(this._activeShopSlot);
+    const level = this.progressionSys?.level ?? 1;
+    const coins = this.progressionSys?.coins ?? 0;
+    const owned = (id) => this.avatarCustomization?.isOwned(id) ?? false;
+    const slotUnlocked = (slot) => this.avatarCustomization?.isSlotUnlocked(slot) ?? true;
+
+    items.forEach((item) => {
+      const levelMet = level >= item.requiredLevel;
+      const affordable = coins >= item.cost;
+      const isOwned = owned(item.id);
+      const slotLocked = !slotUnlocked(item.slot);
+      const canBuy = levelMet && affordable && !isOwned && !slotLocked;
+
+      const card = document.createElement('div');
+      Object.assign(card.style, {
+        background: 'rgba(60,72,74,0.5)', border: '1px solid rgba(217,147,106,0.25)',
+        borderRadius: '8px', padding: '8px', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column', gap: '6px',
+        opacity: isOwned ? 1 : (levelMet && affordable ? 1 : 0.55),
+        cursor: canBuy ? 'pointer' : 'default',
+      });
+
+      const nameRow = document.createElement('div');
+      Object.assign(nameRow.style, {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+      });
+      const nameEl = document.createElement('div');
+      nameEl.textContent = item.label;
+      Object.assign(nameEl.style, {
+        fontSize: '13px', fontWeight: '600', color: '#e8dccc',
+      });
+      const costEl = document.createElement('div');
+      costEl.textContent = isOwned ? 'Owned' : `${item.cost} coins`;
+      Object.assign(costEl.style, {
+        fontSize: '12px', fontWeight: '700',
+        color: isOwned ? '#8cc48c' : (affordable ? '#fcd436' : '#9ab0b4'),
+      });
+      nameRow.appendChild(nameEl);
+      nameRow.appendChild(costEl);
+
+      const reqEl = document.createElement('div');
+      reqEl.textContent = `Level ${item.requiredLevel}${levelMet ? '' : ' — locked'}`;
+      Object.assign(reqEl.style, {
+        fontSize: '11px', color: levelMet ? '#c8d4d8' : '#ff6b6b',
+      });
+
+      const lockHintEl = document.createElement('div');
+      if (slotLocked) {
+        const req = this.avatarCustomization?.getSlotRequirements(item.slot);
+        lockHintEl.textContent = `🔒 Reach ${req?.minTier ?? 'Friend'} tier to unlock ${item.slot}`;
+        Object.assign(lockHintEl.style, {
+          fontSize: '11px', color: '#ff6b6b', marginTop: '2px',
+        });
+      }
+
+      const btn = document.createElement('button');
+      const buttonLabel = slotLocked ? 'Reputation locked'
+        : isOwned ? 'Equip' : (canBuy ? 'Buy' : 'Locked');
+      btn.textContent = buttonLabel;
+      Object.assign(btn.style, {
+        padding: '6px 8px', borderRadius: '6px', border: 'none',
+        fontSize: '12px', fontWeight: '700', cursor: canBuy ? 'pointer' : 'default',
+        background: canBuy ? '#d9936a' : 'rgba(217,147,106,0.15)',
+        color: canBuy ? '#1e282a' : '#9ab0b4',
+        opacity: canBuy ? 1 : 0.6,
+      });
+      btn.disabled = !canBuy;
+
+      btn.addEventListener('click', async () => {
+        if (!canBuy) return;
+        if (!this.progressionSys || !this.avatarCustomization) return;
+        if (this.progressionSys.level < item.requiredLevel) {
+          this.addNotification(`Level ${item.requiredLevel} required`);
+          return;
+        }
+        if (this.progressionSys.coins < item.cost) {
+          this.addNotification('Not enough coins');
+          return;
+        }
+        this.progressionSys.coins -= item.cost;
+        this.progressionSys.save();
+        if (this.progressionSys.onCoinsChange) {
+          this.progressionSys.onCoinsChange(this.progressionSys.coins);
+        }
+        const ok = await this.avatarCustomization.purchase(item.id);
+        if (ok) {
+          this.addNotification(`Purchased ${item.label}`);
+          this._renderShopItems();
+        } else {
+          this.progressionSys.coins += item.cost;
+          this.progressionSys.save();
+          if (this.progressionSys.onCoinsChange) {
+            this.progressionSys.onCoinsChange(this.progressionSys.coins);
+          }
+          this.addNotification('Purchase failed');
+        }
+      });
+
+      card.appendChild(nameRow);
+      card.appendChild(reqEl);
+      card.appendChild(lockHintEl);
+      card.appendChild(btn);
+      grid.appendChild(card);
+    });
   }
 
   cullNameplates(camera) {

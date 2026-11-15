@@ -216,6 +216,9 @@ async function initCore() {
     }
   };
 
+  // Bind shop UI to progression + avatar customization systems.
+  ui.bindShop(progressionSys, avatarCustomization);
+
   // Multiplayer system — connects to the WebSocket relay for cross-player presence.
   multiplayer = new MultiplayerSystem(RELAY_URL, sceneSys.scene, animSys, animData, meshLoader);
 
@@ -333,6 +336,32 @@ async function initCore() {
   }
 
   ui.onTriggerEmote = triggerLocalEmote;
+
+  // Shop button — opens/closes the avatar shop panel.
+  const shopBtn = document.createElement('button');
+  shopBtn.textContent = 'Shop';
+  shopBtn.setAttribute('aria-label', 'Open avatar shop');
+  Object.assign(shopBtn.style, {
+    position: 'fixed', bottom: '20px', right: '20px',
+    width: '140px', zIndex: '310', display: 'none',
+    padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(217,147,106,0.3)',
+    background: 'rgba(60,72,74,0.9)', color: '#e8dccc', fontSize: '0.9rem',
+    cursor: 'pointer', outline: 'none', fontFamily: 'system-ui, sans-serif', fontWeight: '500',
+    backdropFilter: 'blur(4px)',
+  });
+  shopBtn.addEventListener('click', () => {
+    ui.toggleShop();
+    shopBtn.textContent = ui.shopVisible ? 'Close Shop' : 'Shop';
+  });
+  document.body.appendChild(shopBtn);
+
+  // Show the shop button once the game reaches playing state; expose toggle so
+  // the shop panel can update the button text when opened/closed programmatically.
+  const _updateShopButtonVisibility = () => {
+    shopBtn.style.display = gameState === 'playing' ? '' : 'none';
+    if (gameState !== 'playing') ui.hideShop();
+  };
+  ui._updateShopButtonVisibility = _updateShopButtonVisibility;
 
   ui.onSendChat = (text) => {
     if (!chatSys.canSend()) return;
