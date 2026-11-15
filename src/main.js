@@ -20,7 +20,7 @@ import { NPC } from './entities/NPC.js';
 import { AvatarCustomizationSystem } from './systems/AvatarCustomizationSystem.js';
 import { DailyRewardSystem } from './systems/DailyRewardSystem.js';
 import { ProgressionSystem } from './systems/ProgressionSystem.js';
-import { QUESTS } from './data/quests.js';
+import { QUESTS, PRESTIGE_DIALOGUE } from './data/quests.js';
 
 const RELAY_URL = import.meta.env.VITE_RELAY_URL || 'wss://localhost:3005';
 const FALLBACK_TIMEOUT = 5000;
@@ -327,7 +327,26 @@ async function initCore() {
   questSys.onQuestCompleted = (questId, reward) => {
     ui.addNotification('Quest completed!');
     srAnnounce('Quest completed!', 'polite');
+
+    if (!prestigeUnlockedNotified) {
+      const status = questSys.getPrestigeStatus();
+      if (status.available) {
+        prestigeUnlockedNotified = true;
+        questUI._prestigeAvailable = true;
+        questUI._renderList();
+        if (questSys.onPrestigeUnlocked) questSys.onPrestigeUnlocked();
+      }
+    }
   };
+
+  // Prestige unlock notification — fires when 5 street quests are complete.
+  questSys.onPrestigeUnlocked = () => {
+    ui.addNotification('★ Prestige unlocked! Speak to the Planet Guardian.');
+    srAnnounce('Prestige unlocked. Speak to the Planet Guardian.', 'polite');
+  };
+
+  let prestigeUnlockedNotified = false;
+  let prestigeActivating = false; // player is in the prestige activate dialogue flow
 
   ui.addNameplate(playerAvatar, 'You', true);
 
@@ -798,6 +817,54 @@ function _tryInteract() {
     }
   }
   if (!nearest) return;
+
+  // Planet Guardian prestige dialogue: unlock + activate paths.
+  if (nearest.npcType === 'planet-guardian') {
+    const status = questSys.getPrestigeStatus();
+    // Already eligible and player wants to activate prestige → run activate dialogue,
+    // then perform the reset on the final line (the dialogue's onComplete).
+    if (status.available && prestigeActivating) {
+      dialogueSys.showTextSequence(
+        nearest,
+        PRESTIGE_DIALOGUE.activate,
+        () => {
+          const result = questSys.prestigeResetQuests();
+          if (!result.ok) {
+            ui.addNotification(result.reason);
+            return;
+          }
+          const p = progressionSys.prestige();
+          ui.addNotification(`Prestige ×${p.prestigeLevel}! Quests reset, +${p.stardustAwarded} stardust.`);
+          srAnnounce(`Prestige level ${p.prestigeLevel}. Street quests reset.`, 'polite');
+          questUI._prestigeAvailable = false;
+          questUI._renderList();
+          prestigeUnlockedNotified = false; // allow the next prestige cycle to notify
+          ui.addNotification(`Multiplier now ×${progressionSys.prestigeMultiplier().toFixed(1)} on quest XP/coins.`);
+          prestigeActivating = false;
+        }
+      );
+      return;
+    }
+    // First time eligible → show unlock dialogue, flag activation for next press.
+    if (status.available) {
+      prestigeActivating = true;
+      dialogueSys.showTextSequence(
+        nearest,
+        PRESTIGE_DIALOGUE.unlock,
+        () => { prestigeActivating = false; }
+      );
+      return;
+    }
+    // Not yet eligible — guardian has nothing new to say.
+    const step = questSys.interact(nearest);
+    if (step) {
+      dialogueSys.open(nearest);
+    } else {
+      ui.addNotification("There's nothing to say right now.");
+    }
+    return;
+  }
+
   const step = questSys.interact(nearest);
   if (step) {
     dialogueSys.open(nearest);

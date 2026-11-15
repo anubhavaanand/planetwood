@@ -368,3 +368,21 @@ export const QUEST_NPC_TYPES = {
   'musician': 'musician',
   'planet-guardian': 'planet-guardian',
 };
+
+// Prestige endgame dialogue shown by the planet-guardian when the player is
+// eligible to prestige (5 street quests completed in a cycle). Keys:
+// unlock — first time eligible; prestigeActivating flag set for next press.
+// activate — player confirms prestige; onComplete performs the reset.
+// [PLACEHOLDER] dialogue strings; tune after playtests.
+export const PRESTIGE_DIALOGUE = {
+  unlock: [
+    "Five deliveries done. You're ready for the next cycle.",
+    "Speak to me again when you wish to reset the street quests.",
+    "Your reputation and coins stay — only the street quests reset.",
+  ],
+  activate: [
+    "Very well. The street resets. New routes, new faces, same planet.",
+    "Take this stardust — a marker of your passage.",
+    "Go. The street awaits.",
+  ],
+};
